@@ -43,7 +43,7 @@
                     <Button as-child>
                         <NuxtLink to="/login">{{ t('sign_in', 'Sign in', 'تسجيل الدخول') }}</NuxtLink>
                     </Button>
-                    <Button variant="outline" as-child>
+                    <Button v-if="!isOtpMode" variant="outline" as-child>
                         <NuxtLink to="/register">{{ t('register', 'Register', 'إنشاء حساب') }}</NuxtLink>
                     </Button>
                 </template>
@@ -96,7 +96,7 @@
             </div>
         </Teleport>
 
-        <Card class="w-full max-w-2xl text-left">
+        <Card v-if="hasAuthSystem" class="w-full max-w-2xl text-left">
             <CardHeader>
                 <CardTitle>{{ t('current_user', 'Current user', 'المستخدم الحالي') }}</CardTitle>
                 <CardDescription>GET /api/user</CardDescription>
@@ -156,11 +156,13 @@ definePageMeta({
 })
 
 const { user, isAuthenticated, logout, refreshIdentity } = useSanctumAuth()
-const { appUsers, appGuests } = useAuthConfig()
+const { appUsers, appGuests, isOtpMode } = useAuthConfig()
 const { t } = useLang()
 
 const isAuthed = computed(() => isAuthenticated.value && !user.value?.data?.is_guest)
 const isGuest = computed(() => !!user.value?.data?.is_guest)
+// When both app_users and app_guests are off there is no user concept at all.
+const hasAuthSystem = computed(() => appUsers.value || appGuests.value)
 
 const echo = useEcho()
 const events = ref([])
@@ -214,7 +216,7 @@ const fetchUser = async () => {
     }
 }
 
-onMounted(() => { fetchUser() })
+onMounted(() => { if (hasAuthSystem.value) fetchUser() })
 
 const loggingOut = ref(false)
 const deletingGuest = ref(false)

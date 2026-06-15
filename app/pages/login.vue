@@ -54,10 +54,15 @@
             </span>
             <span v-if="errors.identifier" class="text-xs text-red-500">{{ errors.identifier[0] }}</span>
           </div>
+          <div v-if="isOtpMode && identifierStatus === 'missing'" class="grid gap-2">
+            <Label for="name">{{ t('name', 'Name', 'الاسم') }}</Label>
+            <Input id="name" v-model="form.name" type="text" :placeholder="t('placeholder_name', 'John Doe', 'محمد أحمد')" required />
+            <span v-if="errors.name" class="text-xs text-red-500">{{ errors.name[0] }}</span>
+          </div>
           <p v-if="errors.device_id" class="text-xs text-red-500">{{ errors.device_id[0] }}</p>
           <p v-if="errors.platform" class="text-xs text-red-500">{{ errors.platform[0] }}</p>
           <p v-if="errors.fcm_token" class="text-xs text-red-500">{{ errors.fcm_token[0] }}</p>
-          <div class="grid gap-2">
+          <div v-if="!isOtpMode" class="grid gap-2">
             <div class="flex items-center justify-between">
               <Label for="password">{{ t('password', 'Password', 'كلمة المرور') }}</Label>
               <NuxtLink
@@ -71,8 +76,8 @@
           <Button
             type="submit"
             class="w-full"
-            :disabled="loading || identifierStatus === 'suspended' || identifierStatus === 'missing' || (identifierStatus === 'active' && !hasPasswordOnAccount)"
-          >{{ loading ? t('signing_in', 'Signing in...', 'جارٍ تسجيل الدخول...') : t('sign_in', 'Sign in', 'تسجيل الدخول') }}</Button>
+            :disabled="submitDisabled"
+          >{{ submitLabel }}</Button>
         </form>
       </CardContent>
       <CardContent v-if="appUsers && socialAuthAvailable && socialProviders.length" class="flex flex-col gap-3">
@@ -100,7 +105,7 @@
           {{ t('continue_as_guest', 'Continue as guest', 'المتابعة كزائر') }}
         </Button>
       </CardContent>
-      <CardFooter v-if="appUsers" class="justify-center text-sm">
+      <CardFooter v-if="appUsers && !isOtpMode" class="justify-center text-sm">
         <span class="text-muted-foreground">{{ t('no_account', 'No account?', 'ليس لديك حساب؟') }}&nbsp;</span>
         <NuxtLink
           to="/register"
@@ -147,7 +152,7 @@ definePageMeta({
   name: 'login'
 })
 
-const { identifierLabel, identifierInputType, identifierPlaceholder, socialAuthAvailable, socialProviders, appUsers, appGuests } = useAuthConfig()
+const { identifierLabel, identifierInputType, identifierPlaceholder, socialAuthAvailable, socialProviders, appUsers, appGuests, isOtpMode } = useAuthConfig()
 const { t } = useLang()
 
 const errors = ref({})
@@ -171,7 +176,28 @@ const providerLabel = (p) => ({
 }[p] ?? p)
 
 const client = useApi()
-const form = ref({ identifier: '', password: '' })
+const form = ref({ identifier: '', password: '', name: '' })
+
+const submitDisabled = computed(() => {
+  if (loading.value) return true
+  if (identifierStatus.value === 'suspended') return true
+  if (isOtpMode.value) {
+    if (identifierStatus.value === 'missing' && !form.value.name) return true
+    return false
+  }
+  if (identifierStatus.value === 'missing') return true
+  if (identifierStatus.value === 'active' && !hasPasswordOnAccount.value) return true
+  return false
+})
+
+const submitLabel = computed(() => {
+  if (loading.value) return isOtpMode.value
+    ? t('sending', 'Sending...', 'جارٍ الإرسال...')
+    : t('signing_in', 'Signing in...', 'جارٍ تسجيل الدخول...')
+  return isOtpMode.value
+    ? t('send_code', 'Send code', 'إرسال الرمز')
+    : t('sign_in', 'Sign in', 'تسجيل الدخول')
+})
 
 const { user, login, refreshIdentity } = useSanctumAuth()
 
@@ -262,6 +288,21 @@ const performLogin = async () => {
   }
 }
 
+const performOtpRequest = async () => {
+  errors.value = {}
+  loading.value = true
+  try {
+    const body = { identifier: form.value.identifier }
+    if (identifierStatus.value === 'missing' && form.value.name) body.name = form.value.name
+    await client('/api/login', { method: 'POST', body })
+    navigateTo({ path: '/verify-login', query: { identifier: form.value.identifier } })
+  } catch (error) {
+    errors.value = error.data?.errors ?? {}
+  } finally {
+    loading.value = false
+  }
+}
+
 const continueAsGuest = async () => {
   loading.value = true
   try {
@@ -277,6 +318,10 @@ const continueAsGuest = async () => {
 
 const onSubmit = () => {
   if (identifierStatus.value === 'suspended') return
+  if (isOtpMode.value) {
+    performOtpRequest()
+    return
+  }
   if (identifierStatus.value === 'pending_deletion') {
     restoreDialogOpen.value = true
     return

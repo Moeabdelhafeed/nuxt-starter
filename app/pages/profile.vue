@@ -128,7 +128,7 @@
         </CardContent>
       </Card>
 
-      <Card>
+      <Card v-if="!isOtpMode">
         <CardHeader>
           <CardTitle>{{ hasPassword ? t('change_password', 'Change password', 'تغيير كلمة المرور') : t('set_password', 'Set password', 'تعيين كلمة المرور') }}</CardTitle>
           <CardDescription>{{ hasPassword ? t('change_password_description', 'Revokes all other sessions.', 'يلغي كل الجلسات الأخرى.') : t('set_password_description', 'Add a password so you can log in without a social provider.', 'أضف كلمة مرور لتسجيل الدخول بدون مزوّد اجتماعي.') }}</CardDescription>
@@ -372,6 +372,7 @@ const {
   socialProviders,
   maxSocialAccounts,
   multiSession,
+  isOtpMode,
 } = useAuthConfig()
 const { t } = useLang()
 const { signInWithProvider } = useFirebaseAuth()

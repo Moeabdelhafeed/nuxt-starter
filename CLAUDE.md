@@ -21,12 +21,13 @@ Laravel API at `runtimeConfig.public.baseUrl` (default `http://localhost:8000`).
 
 Auth endpoints (Sanctum module config in [nuxt.config.ts](nuxt.config.ts)):
 - `POST /api/login`, `POST /api/logout`, `GET /api/user` for session.
+- `POST /api/verify-login` (OTP mode only) — `{ identifier, otp }` → `{ token, user, is_verified, token_id, account_restored? }`.
 - `POST /api/register`, `POST /api/check-identifier`, `POST /api/forgot-password`, `POST /api/verify-forgot-password-otp`, `POST /api/change-forgot-password`, `POST /api/verify-otp`, `POST /api/send-otp`.
 - `PUT /api/update-profile`, `POST /api/change-password`, `POST /api/request-identifier-change`, `POST /api/verify-identifier-change`, `DELETE /api/delete-account`.
 - `GET /api/social-accounts`, `POST /api/link-social-account`, `DELETE /api/unlink-social-account`.
 
 Config endpoints:
-- `GET /api/config` — returns `{ identifiers, has_username_field, has_email_field, has_phone_field, social_providers, max_social_accounts, social_auth_available, is_otp_whatsapp }`. Drives form rendering.
+- `GET /api/config` — returns `{ identifiers, has_username_field, has_email_field, has_phone_field, social_providers, max_social_accounts, social_auth_available, is_otp_whatsapp, multi_session, app_users, app_guests, auth_mode }`. Drives form rendering. `auth_mode` ∈ `{ 'password', 'otp' }` (default `password`).
 - `GET /api/languages` — returns array of `{ id, code, name, native_name, direction, is_default, image: { image_api } }`.
 - `GET /api/translations?group=web` — returns `{ key: "value with :placeholders" }` flat map for current `Accept-Language` header.
 - `POST /api/translations` — body `{ translations: { key: value }, group }`. Used in remote mode to seed missing keys.
@@ -145,6 +146,16 @@ Reason: lightweight, no extra deps, easy to style.
 - `sanctum:guest` — requires no session (login/register/forgot pages).
 - `verified` ([app/middleware/verified.js](app/middleware/verified.js)) — requires email verification.
 - `unverified` ([app/middleware/unverified.js](app/middleware/unverified.js)) — for `/verify` page.
+
+### No-auth-system mode (both `app_users` and `app_guests` off)
+
+The backend now allows disabling **both** `app_users` and `app_guests` — a pure public content app with no user concept. The client adapts via `useAuthConfig` (`appUsers`/`appGuests`, both `false` here):
+- `require-user` lets routes through (no user required) instead of bouncing to `/login`.
+- `require-pre-auth` redirects auth pages (login/register/verify/forgot) to `/` since they have nothing to render.
+- `useApi`/`useApiFetch` already fall back to `$publicApi` (no Bearer) when `appUsers` is off.
+- `index.vue` hides the auth/guest buttons + the `GET /api/user` probe card via `hasAuthSystem = appUsers || appGuests`.
+
+When adding auth-gated pages/UI, gate on `appUsers`/`appGuests` (or `hasAuthSystem`) so the no-auth-system build stays coherent.
 
 ## Env vars
 

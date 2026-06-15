@@ -36,6 +36,8 @@ export const useAuthConfig = () => {
   const multiSession = computed(() => !!cfg.value.multi_session)
   const appUsers = computed(() => cfg.value.app_users !== false)
   const appGuests = computed(() => cfg.value.app_guests !== false)
+  const authMode = computed(() => cfg.value.auth_mode ?? 'password')
+  const isOtpMode = computed(() => authMode.value === 'otp')
 
   const labelFor = (k) => {
     const { t } = useLang()
@@ -68,22 +70,23 @@ export const useAuthConfig = () => {
     const parts = identifiers.value.map(labelFor)
     const orWord = t('or', 'or', 'أو')
     let base = parts.length > 1 ? parts.join(` ${orWord} `) : parts[0] ?? labelFor('email')
-    if (hasUsername.value) base += ` ${orWord} ${labelFor('username')}`
+    if (hasUsername.value && !isOtpMode.value) base += ` ${orWord} ${labelFor('username')}`
     return base
   })
 
   const identifierInputType = computed(() => {
-    if (hasUsername.value) return 'text'
+    if (hasUsername.value && !isOtpMode.value) return 'text'
     if (identifiers.value.length === 1) return inputTypeFor(identifiers.value[0])
     return 'text'
   })
 
   const identifierPlaceholder = computed(() => {
-    if (identifiers.value.length === 1 && !hasUsername.value) {
+    const includeUsername = hasUsername.value && !isOtpMode.value
+    if (identifiers.value.length === 1 && !includeUsername) {
       return placeholderFor(identifiers.value[0])
     }
     const samples = identifiers.value.map((k) => placeholderFor(k)).filter(Boolean)
-    if (hasUsername.value) samples.push('jdoe')
+    if (includeUsername) samples.push('jdoe')
     return samples.join(' / ')
   })
 
@@ -102,6 +105,8 @@ export const useAuthConfig = () => {
     multiSession,
     appUsers,
     appGuests,
+    authMode,
+    isOtpMode,
     labelFor,
     inputTypeFor,
     placeholderFor,

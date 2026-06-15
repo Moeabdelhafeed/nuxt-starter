@@ -113,7 +113,7 @@
 
 <script setup>
 definePageMeta({
-  middleware: ['auth-mode', 'require-pre-auth'],
+  middleware: ['auth-mode', 'require-pre-auth', 'password-mode-only'],
   name: 'register'
 })
 

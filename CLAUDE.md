@@ -19,6 +19,8 @@ Laravel API at `runtimeConfig.public.baseUrl` (default `http://localhost:8000`).
 - `X-API-TOKEN: <runtimeConfig.public.xApiToken>` (from `.env` `NUXT_PUBLIC_X_API_TOKEN`).
 - `Accept-Language: <locale code>` (sourced based on translations mode — see below).
 
+**Method override (mandatory):** the production host blocks real `PUT`/`PATCH`/`DELETE`. Both transports rewrite those to **`POST` + an `X-HTTP-Method-Override` header** carrying the real verb — the Sanctum client via the `sanctum:request` hook in [app/plugins/02.method-override.js](app/plugins/02.method-override.js), and `$publicApi` in its own `onRequest` ([app/plugins/01.public-api.js](app/plugins/01.public-api.js)). So you still write `useApi()('/api/...', { method: 'PUT' })` as normal — it goes out as POST automatically. Don't hand-roll a bare `$fetch` for a mutating call; route it through `useApi` / `useSanctumClient` / `useSanctumFetch` so the override applies.
+
 Auth endpoints (Sanctum module config in [nuxt.config.ts](nuxt.config.ts)):
 - `POST /api/login`, `POST /api/logout`, `GET /api/user` for session.
 - `POST /api/verify-login` (OTP mode only) — `{ identifier, otp }` → `{ token, user, is_verified, token_id, account_restored? }`.

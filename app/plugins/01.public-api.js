@@ -21,6 +21,16 @@ export default defineNuxtPlugin(() => {
           : (lang.value?.code ?? 'en')
         headers.set('Accept-Language', code)
       }
+
+      // The production host blocks real PUT/PATCH/DELETE — send them as POST
+      // with an X-HTTP-Method-Override header. Laravel's kernel resolves the
+      // real verb from the header, so routes stay Route::put/delete.
+      const method = String(options.method ?? 'GET').toUpperCase()
+      if (method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
+        headers.set('X-HTTP-Method-Override', method)
+        options.method = 'POST'
+      }
+
       options.headers = headers
     },
   })

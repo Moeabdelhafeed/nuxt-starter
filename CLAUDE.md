@@ -29,10 +29,26 @@ Auth endpoints (Sanctum module config in [nuxt.config.ts](nuxt.config.ts)):
 - `GET /api/social-accounts`, `POST /api/link-social-account`, `DELETE /api/unlink-social-account`.
 
 Config endpoints:
-- `GET /api/config` — returns `{ identifiers, has_username_field, has_email_field, has_phone_field, social_providers, max_social_accounts, social_auth_available, is_otp_whatsapp, multi_session, app_users, app_guests, auth_mode }`. Drives form rendering. `auth_mode` ∈ `{ 'password', 'otp' }` (default `password`).
+- `GET /api/config` — returns `{ identifiers, has_username_field, has_email_field, has_phone_field, social_providers, max_social_accounts, social_auth_available, is_otp_whatsapp, multi_session, app_users, app_guests, auth_mode, allowed_email_domains, allowed_phone_countries }`. Drives form rendering. `auth_mode` ∈ `{ 'password', 'otp' }` (default `password`).
+  - `allowed_email_domains` — the string `"all"` (unrestricted) **or** an array like `["gmail.com","yahoo.com"]`. When an array, pre-validate the email domain client-side before submit and surface an inline error for others.
+  - `allowed_phone_countries` — the string `"all"` **or** an array of ISO country codes like `["JO","SA","US"]`. When an array, restrict the phone country-code picker to those.
 - `GET /api/languages` — returns array of `{ id, code, name, native_name, direction, is_default, image: { image_api } }`.
 - `GET /api/translations?group=web` — returns `{ key: "value with :placeholders" }` flat map for current `Accept-Language` header.
 - `POST /api/translations` — body `{ translations: { key: value }, group }`. Used in remote mode to seed missing keys.
+- `GET /api/app-settings` — public (no Bearer), gated by backend `HAS_APP_SETTINGS`. Returns the app's link blocks, localized via `Accept-Language`. `data` always has all five keys (empty arrays when unset), each item ordered by `sort_order`, active only:
+  ```json
+  { "social": [{ "id": 1, "text": "Twitter", "url": "https://…", "image": "https://…|null" }],
+    "contact": [], "app_store": [], "google_play": [], "app_gallery": [] }
+  ```
+  Use for footer/social icons, contact links, and store badges. `image` is a full URL or `null`; `text` is the current-locale label. Consume via `useAppSettings()` (see below).
+- `GET /api/pages` / `GET /api/pages/{slug}` — public, gated by backend `HAS_PAGES`. Active CMS pages localized via `Accept-Language`. Page shape `{ id, slug, name, content, image }` (`content` is markdown/HTML). Consume via `usePages()` / `usePage(slug)`.
+
+### Content composables
+
+Public, SSR-friendly, deduped, and locale-reactive (refetch when `lang` / `i18n_locale` cookie changes). All route through `useApiFetch` and unwrap the `{ data }` envelope:
+- `useAppSettings()` → `{ blocks, social, contact, appStore, googlePlay, appGallery, pending, error, refresh }`. Each block is an array of `{ id, text, url, image }`.
+- `usePages()` → `{ pages, bySlug(slug), pending, error, refresh }`.
+- `usePage(slug)` → `{ page, pending, error, refresh }` (`slug` may be a ref).
 
 Response envelope: `{ success, message, errors, data }`. Pages typically read `res?.data ?? res ?? {}` to be tolerant.
 
@@ -119,6 +135,7 @@ For 3+ locales **always use map form** — positional only handles en/ar.
 - `labelFor`/`placeholderFor`/`inputTypeFor`: kind-specific i18n-aware values (use `t()` internally with en + ar defaults).
 - `identifierLabel`/`identifierInputType`/`identifierPlaceholder`: composite label/type for the login/forgot identifier input. Joins multiple kinds with translated `or`.
 - `socialAuthAvailable`: gates social-accounts card.
+- `allowedEmailDomains` / `allowedPhoneCountries`: `"all"` or an array (see `/api/config` above). Use to constrain the email/phone inputs — restrict the country picker, and reject out-of-list email domains before hitting the API (the backend enforces the same list, so this is UX only, not a security boundary).
 
 `/api/social-accounts` returns `{ social_accounts, allowed_providers, max_accounts, can_link_more }`. Profile uses these for the link-account UI. `max_accounts === 0` means unlimited (notice "limit reached" only shown when `!canLinkMore && maxAccounts > 0`).
 

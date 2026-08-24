@@ -58,7 +58,7 @@ definePageMeta({
   name: 'devices',
 })
 
-const { t } = useLang()
+const { t } = useLang('web', 'profile')
 const client = useApi()
 
 const { data, pending, refresh } = useApiFetch('/api/devices', { key: 'devices' })

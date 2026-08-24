@@ -52,7 +52,7 @@ const loading = ref(false)
 const resending = ref(false)
 const client = useApi()
 const { user, refreshIdentity, logout } = useSanctumAuth()
-const { t } = useLang()
+const { t } = useLang('web', 'auth')
 
 const otp = ref('')
 const cooldown = ref(0)

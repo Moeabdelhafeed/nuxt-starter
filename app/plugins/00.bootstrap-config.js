@@ -1,5 +1,5 @@
-const buildHeaders = (xApiToken, deviceId, platform, fcmToken, langCode, bearer) => {
-  const h = { 'X-API-TOKEN': xApiToken }
+const buildHeaders = (deviceId, platform, fcmToken, langCode, bearer) => {
+  const h = {}
   if (deviceId) h['X-Device-Id'] = deviceId
   if (platform) h['X-Platform'] = platform
   if (fcmToken && (platform === 'ios' || platform === 'android')) h['X-FCM-Token'] = fcmToken
@@ -11,7 +11,7 @@ const buildHeaders = (xApiToken, deviceId, platform, fcmToken, langCode, bearer)
 export default defineNuxtPlugin(async (nuxtApp) => {
   const cfgState = useState('config', () => ({}))
   const user = useSanctumUser()
-  const { baseUrl, xApiToken, translationsMode } = useRuntimeConfig().public
+  const { baseUrl, translationsMode } = useRuntimeConfig().public
   const { deviceId, platform, fcmToken } = useDevice()
   const lang = useCookie('lang')
   const i18nLocale = useCookie('i18n_locale')
@@ -23,7 +23,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
   const sanctumAppCfg = useSanctumAppConfig()
   const bearer = await sanctumAppCfg?.tokenStorage?.get?.(nuxtApp).catch(() => null)
 
-  const headers = buildHeaders(xApiToken, deviceId.value, platform.value, fcmToken.value, code, bearer)
+  const headers = buildHeaders(deviceId.value, platform.value, fcmToken.value, code, bearer)
 
   const [cfgRes, userRes] = await Promise.allSettled([
     $fetch('/api/config', { baseURL: baseUrl, headers }),

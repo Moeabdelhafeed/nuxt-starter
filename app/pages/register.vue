@@ -118,7 +118,7 @@ definePageMeta({
 })
 
 const { identifiers, isMultiIdentifier, showsExtraField, isExtraRequired, inputTypeFor, placeholderFor, labelFor } = useAuthConfig()
-const { t } = useLang()
+const { t } = useLang('web', 'auth')
 
 const errors = ref({})
 const loading = ref(false)

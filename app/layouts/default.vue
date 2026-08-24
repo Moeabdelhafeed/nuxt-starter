@@ -1,7 +1,10 @@
 <template>
   <Html :lang="code" :dir="dir" class="light">
     <Body>
-      <NuxtPage />
+      <div class="flex min-h-svh flex-col">
+        <NuxtPage />
+        <AppFooter />
+      </div>
       <LanguageSwitcher />
     </Body>
   </Html>

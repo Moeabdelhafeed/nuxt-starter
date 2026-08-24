@@ -2,8 +2,7 @@ export default defineAppConfig({
   echo: {
     interceptors: {
       onRequest: async (app, ctx) => {
-        const { xApiToken, translationsMode } = useRuntimeConfig().public
-        ctx.options.headers.set('X-API-TOKEN', xApiToken)
+        const { translationsMode } = useRuntimeConfig().public
 
         const { deviceId, platform, fcmToken } = useDevice()
         if (deviceId.value) ctx.options.headers.set('X-Device-Id', deviceId.value)

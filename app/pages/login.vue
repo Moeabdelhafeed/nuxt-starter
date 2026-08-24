@@ -2,6 +2,12 @@
   <div class="relative flex min-h-svh items-center justify-center bg-muted/40 p-6 pb-20">
     <Card class="w-full max-w-sm">
       <CardHeader>
+        <img
+          v-if="logo"
+          :src="logo"
+          alt="Logo"
+          class="mb-2 h-12 w-auto self-start object-contain"
+        />
         <CardTitle class="text-2xl">{{ appUsers ? t('login_title', 'Login', 'تسجيل الدخول') : t('welcome', 'Welcome', 'مرحبًا') }}</CardTitle>
         <CardDescription>
           {{ appUsers
@@ -153,7 +159,10 @@ definePageMeta({
 })
 
 const { identifierLabel, identifierInputType, identifierPlaceholder, socialAuthAvailable, socialProviders, appUsers, appGuests, isOtpMode } = useAuthConfig()
-const { t } = useLang()
+const { t } = useLang('web', 'auth')
+
+const { media } = useMedia('web', 'branding')
+const logo = computed(() => media('logo', '/logo.png'))
 
 const errors = ref({})
 const loading = ref(false)

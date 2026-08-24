@@ -1,5 +1,5 @@
 export default defineNuxtPlugin(() => {
-  const { baseUrl, xApiToken, translationsMode } = useRuntimeConfig().public
+  const { baseUrl, translationsMode } = useRuntimeConfig().public
   const { deviceId, platform, fcmToken } = useDevice()
   const lang = useCookie('lang')
   const i18nLocale = useCookie('i18n_locale')
@@ -9,7 +9,6 @@ export default defineNuxtPlugin(() => {
     baseURL: baseUrl,
     onRequest({ options }) {
       const headers = new Headers(options.headers)
-      headers.set('X-API-TOKEN', xApiToken)
       if (deviceId.value) headers.set('X-Device-Id', deviceId.value)
       if (platform.value) headers.set('X-Platform', platform.value)
       if (fcmToken.value && (platform.value === 'ios' || platform.value === 'android')) {

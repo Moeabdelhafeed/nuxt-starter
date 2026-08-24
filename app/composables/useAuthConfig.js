@@ -3,14 +3,14 @@ export const useAuthConfig = () => {
   const cfg = computed(() => cfgState.value ?? {})
 
   const refresh = async () => {
-    const { baseUrl, xApiToken, translationsMode } = useRuntimeConfig().public
+    const { baseUrl, translationsMode } = useRuntimeConfig().public
     const { deviceId, platform, fcmToken } = useDevice()
     const lang = useCookie('lang')
     const i18nLocale = useCookie('i18n_locale')
     const code = translationsMode === 'local'
       ? (i18nLocale.value ?? lang.value?.code ?? 'en')
       : (lang.value?.code ?? 'en')
-    const headers = { 'X-API-TOKEN': xApiToken, 'Accept-Language': code }
+    const headers = { 'Accept-Language': code }
     if (deviceId.value) headers['X-Device-Id'] = deviceId.value
     if (platform.value) headers['X-Platform'] = platform.value
     if (fcmToken.value && (platform.value === 'ios' || platform.value === 'android')) {
@@ -39,15 +39,31 @@ export const useAuthConfig = () => {
   const authMode = computed(() => cfg.value.auth_mode ?? 'password')
   const isOtpMode = computed(() => authMode.value === 'otp')
 
+  // "all" (unrestricted) or an array of values. Backend enforces the same list;
+  // these are for UX (pre-validate email domain, constrain country picker).
+  const allowedEmailDomains = computed(() => cfg.value.allowed_email_domains ?? 'all')
+  const allowedPhoneCountries = computed(() => cfg.value.allowed_phone_countries ?? 'all')
+  const isEmailDomainAllowed = (email) => {
+    const list = allowedEmailDomains.value
+    if (list === 'all' || !Array.isArray(list) || !list.length) return true
+    const domain = String(email ?? '').split('@')[1]?.toLowerCase()
+    return !!domain && list.map((d) => String(d).toLowerCase()).includes(domain)
+  }
+  const isPhoneCountryAllowed = (code) => {
+    const list = allowedPhoneCountries.value
+    if (list === 'all' || !Array.isArray(list) || !list.length) return true
+    return list.map((c) => String(c).toUpperCase()).includes(String(code ?? '').toUpperCase())
+  }
+
   const labelFor = (k) => {
-    const { t } = useLang()
+    const { t } = useLang('web', 'auth')
     const en = { email: 'Email', phone: 'Phone', username: 'Username' }
     const ar = { email: 'البريد', phone: 'الهاتف', username: 'اسم المستخدم' }
     return en[k] ? t(`label_${k}`, en[k], ar[k]) : k
   }
   const inputTypeFor = (k) => ({ email: 'email', phone: 'tel', username: 'text' }[k] ?? 'text')
   const placeholderFor = (k) => {
-    const { t } = useLang()
+    const { t } = useLang('web', 'auth')
     const en = { email: 'm@example.com', phone: '+1234567890', username: 'jdoe' }
     const ar = { email: 'm@example.com', phone: '+9665XXXXXXXX', username: 'jdoe' }
     return en[k] ? t(`placeholder_${k}`, en[k], ar[k]) : ''
@@ -66,7 +82,7 @@ export const useAuthConfig = () => {
   }
 
   const identifierLabel = computed(() => {
-    const { t } = useLang()
+    const { t } = useLang('web', 'auth')
     const parts = identifiers.value.map(labelFor)
     const orWord = t('or', 'or', 'أو')
     let base = parts.length > 1 ? parts.join(` ${orWord} `) : parts[0] ?? labelFor('email')
@@ -107,6 +123,10 @@ export const useAuthConfig = () => {
     appGuests,
     authMode,
     isOtpMode,
+    allowedEmailDomains,
+    allowedPhoneCountries,
+    isEmailDomainAllowed,
+    isPhoneCountryAllowed,
     labelFor,
     inputTypeFor,
     placeholderFor,

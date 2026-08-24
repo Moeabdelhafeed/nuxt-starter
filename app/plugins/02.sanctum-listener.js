@@ -4,9 +4,8 @@ export default defineNuxtPlugin((nuxtApp) => {
   const { deviceId, platform, fcmToken } = useDevice()
 
   nuxtApp.hook('sanctum:request', (_app, ctx) => {
-    const { xApiToken, translationsMode } = useRuntimeConfig().public
+    const { translationsMode } = useRuntimeConfig().public
     const headers = new Headers(ctx.options.headers)
-    headers.set('X-API-TOKEN', xApiToken)
 
     if (deviceId.value) headers.set('X-Device-Id', deviceId.value)
     if (platform.value) headers.set('X-Platform', platform.value)

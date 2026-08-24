@@ -374,7 +374,7 @@ const {
   multiSession,
   isOtpMode,
 } = useAuthConfig()
-const { t } = useLang()
+const { t } = useLang('web', 'profile')
 const { signInWithProvider } = useFirebaseAuth()
 
 const identifierKind = ref(identifiers.value[0] ?? 'email')

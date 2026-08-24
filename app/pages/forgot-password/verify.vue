@@ -47,7 +47,7 @@ const errors = ref({})
 const loading = ref(false)
 const resending = ref(false)
 const client = useApi()
-const { t } = useLang()
+const { t } = useLang('web', 'auth')
 
 const form = ref({
   identifier: route.query.identifier?.toString() ?? '',

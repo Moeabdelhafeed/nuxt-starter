@@ -24,7 +24,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['select'])
 
-const { t } = useLang()
+const { t } = useLang('web', 'auth')
 const { signInWithProvider } = useFirebaseAuth()
 const pending = ref(null)
 

@@ -7,9 +7,10 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
 
   runtimeConfig: {
+    xApiToken: '',        // NUXT_X_API_TOKEN — private, server-only. Injected by server/api/[...].js proxy.
+    apiBaseUrl: '',       // NUXT_API_BASE_URL — private. Real Laravel URL the proxy forwards to.
     public: {
-      baseUrl: '',
-      xApiToken: '',
+      baseUrl: '',        // own origin (relative). Client fetches hit Nitro proxy, not Laravel directly.
       translationsMode: process.env.NUXT_PUBLIC_TRANSLATIONS_MODE, // 'remote' | 'local'
       firebase: {
         apiKey: '',
@@ -26,7 +27,7 @@ export default defineNuxtConfig({
     broadcaster: 'pusher', // available: reverb, pusher
     authentication: {
       mode: 'token',
-      baseUrl: process.env.NUXT_PUBLIC_BASE_URL,
+      baseUrl: '', // own origin → /api/broadcasting/auth proxied to Laravel
       authEndpoint: '/api/broadcasting/auth',
     },
   },
@@ -35,7 +36,7 @@ export default defineNuxtConfig({
     "~/assets/css/main.css",
   ],
   sanctum: {
-    baseUrl: process.env.NUXT_PUBLIC_BASE_URL, // Laravel API
+    baseUrl: '', // own origin → /api/* proxied to Laravel by server/api/[...].js
     mode: 'token',
     endpoints: {
       login: '/api/login',

@@ -64,7 +64,7 @@ let timer = null
 
 const client = useApi()
 const { user, refreshIdentity } = useSanctumAuth()
-const { t } = useLang()
+const { t } = useLang('web', 'auth')
 
 const startCooldown = () => {
   cooldown.value = RESEND_COOLDOWN

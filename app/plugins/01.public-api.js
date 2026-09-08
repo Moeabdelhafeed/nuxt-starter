@@ -1,25 +1,12 @@
-export default defineNuxtPlugin(() => {
-  const { baseUrl, translationsMode } = useRuntimeConfig().public
-  const { deviceId, platform, fcmToken } = useDevice()
-  const lang = useCookie('lang')
-  const i18nLocale = useCookie('i18n_locale')
+export default defineNuxtPlugin((nuxtApp) => {
+  const { baseUrl } = useRuntimeConfig().public
+  const { apply } = useApiHeaders()
 
   /** @type {import('ofetch').$Fetch} */
   const publicApi = $fetch.create({
     baseURL: baseUrl,
     onRequest({ options }) {
-      const headers = new Headers(options.headers)
-      if (deviceId.value) headers.set('X-Device-Id', deviceId.value)
-      if (platform.value) headers.set('X-Platform', platform.value)
-      if (fcmToken.value && (platform.value === 'ios' || platform.value === 'android')) {
-        headers.set('X-FCM-Token', fcmToken.value)
-      }
-      if (!headers.has('Accept-Language')) {
-        const code = translationsMode === 'local'
-          ? (i18nLocale.value ?? lang.value?.code ?? 'en')
-          : (lang.value?.code ?? 'en')
-        headers.set('Accept-Language', code)
-      }
+      const headers = apply(options.headers)
 
       // The production host blocks real PUT/PATCH/DELETE — send them as POST
       // with an X-HTTP-Method-Override header. Laravel's kernel resolves the
@@ -32,6 +19,9 @@ export default defineNuxtPlugin(() => {
 
       options.headers = headers
     },
+    // Same app-wide error handling the Sanctum client gets (see 04.api-errors.client.js).
+    onResponseError: (ctx) => nuxtApp.callHook('api:error:response', ctx),
+    onRequestError: (ctx) => nuxtApp.callHook('api:error:request', ctx),
   })
 
   return { provide: { publicApi } }

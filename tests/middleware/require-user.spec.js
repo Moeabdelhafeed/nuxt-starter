@@ -15,7 +15,7 @@ const { navigateTo, sanctumState, authConfig } = vi.hoisted(() => ({
 
 mockNuxtImport('navigateTo', () => navigateTo)
 mockNuxtImport('useSanctumAuth', () => () => sanctumState)
-mockNuxtImport('useAuthConfig', () => () => authConfig)
+mockNuxtImport('useAuthFlags', () => () => authConfig)
 
 const middleware = (await import('~/middleware/require-user')).default
 

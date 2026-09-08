@@ -1,34 +1,37 @@
+/**
+ * When this browser's token is revoked from another device (or by a single-session
+ * login elsewhere), the API broadcasts `device.revoked` with the token id. If it is ours,
+ * drop the session locally and go back to sign-in — the token is already dead.
+ */
 export default defineNuxtPlugin(() => {
-  const user = useSanctumUser()
-  const tokenIdCookie = useCookie('current_token_id', { sameSite: 'lax' })
+  const { user, tokenId, clearLocal } = useAuthSession()
+  const { toast } = useToast()
+  const { t } = useLang('web', 'general')
   const { $echo } = useNuxtApp()
+  if (!$echo) return
 
   let activeUserId = null
 
-  const userId = (u) => u?.data?.id ?? u?.id ?? null
-
   const handleRevoke = async (event) => {
-    const local = Number(tokenIdCookie.value)
+    const local = Number(tokenId.value)
     if (!local || Number(event?.token_id) !== local) return
-    document.cookie = 'current_token_id=; path=/; max-age=0'
-    document.cookie = 'sanctum.token.cookie=; path=/; max-age=0'
-    user.value = null
-    await navigateTo('/login')
+    await clearLocal()
+    toast({ title: t('signed_out_elsewhere', 'You were signed out from another device.', 'تم تسجيل خروجك من جهاز آخر.'), variant: 'destructive' })
+    await navigateTo({ name: 'login' })
   }
 
   const subscribe = (uid) => {
-    if (!$echo || !uid) return
     activeUserId = uid
     $echo.private(`user.${uid}`).listen('.device.revoked', handleRevoke)
   }
 
   const unsubscribe = () => {
-    if ($echo && activeUserId) $echo.leave(`user.${activeUserId}`)
+    if (activeUserId) $echo.leave(`user.${activeUserId}`)
     activeUserId = null
   }
 
   watch(
-    () => userId(user.value),
+    () => (user.value?.data?.is_guest ? null : user.value?.data?.id ?? null),
     (next) => {
       if (activeUserId === next) return
       unsubscribe()

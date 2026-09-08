@@ -1,43 +1,27 @@
 export const useAuthConfig = () => {
-  const cfgState = useState('config', () => ({}))
-  const cfg = computed(() => cfgState.value ?? {})
-
-  const refresh = async () => {
-    const { baseUrl, translationsMode } = useRuntimeConfig().public
-    const { deviceId, platform, fcmToken } = useDevice()
-    const lang = useCookie('lang')
-    const i18nLocale = useCookie('i18n_locale')
-    const code = translationsMode === 'local'
-      ? (i18nLocale.value ?? lang.value?.code ?? 'en')
-      : (lang.value?.code ?? 'en')
-    const headers = { 'Accept-Language': code }
-    if (deviceId.value) headers['X-Device-Id'] = deviceId.value
-    if (platform.value) headers['X-Platform'] = platform.value
-    if (fcmToken.value && (platform.value === 'ios' || platform.value === 'android')) {
-      headers['X-FCM-Token'] = fcmToken.value
-    }
-    try {
-      const res = await $fetch('/api/config', { baseURL: baseUrl, headers })
-      cfgState.value = res?.data ?? res ?? {}
-    } catch (err) {
-      console.warn('[useAuthConfig] refresh failed', err?.message ?? err)
-    }
-  }
+  const flags = useAuthFlags()
+  const { cfg, isOtpMode } = flags
+  // Taken once here, in setup, rather than inside `labelFor` & co: a composable that
+  // fetches (useLang → useApiFetch) must not be created during render.
+  const { t } = useLang('web', 'auth')
 
   const identifiers = computed(() => (cfg.value.identifiers?.length ? cfg.value.identifiers : ['email']))
   const isMultiIdentifier = computed(() => identifiers.value.length > 1)
+
   const hasUsername = computed(() => !!cfg.value.has_username_field)
+  // Every identifier request declares which kind it carries — the API never guesses from
+  // the string, so a phone with no country code is rejected instead of reinterpreted.
+  // `username` is login-only; it is never a registration identifier.
+  const identifierTypes = computed(() =>
+    hasUsername.value ? [...identifiers.value, 'username'] : identifiers.value,
+  )
+  const defaultIdentifierType = computed(() => identifiers.value[0])
   const hasEmail = computed(() => !!cfg.value.has_email_field)
   const hasPhone = computed(() => !!cfg.value.has_phone_field)
   const socialProviders = computed(() => cfg.value.social_providers ?? [])
   const socialAuthAvailable = computed(() => !!cfg.value.social_auth_available)
   const maxSocialAccounts = computed(() => cfg.value.max_social_accounts ?? 0)
   const isOtpWhatsapp = computed(() => !!cfg.value.is_otp_whatsapp)
-  const multiSession = computed(() => !!cfg.value.multi_session)
-  const appUsers = computed(() => cfg.value.app_users !== false)
-  const appGuests = computed(() => cfg.value.app_guests !== false)
-  const authMode = computed(() => cfg.value.auth_mode ?? 'password')
-  const isOtpMode = computed(() => authMode.value === 'otp')
 
   // "all" (unrestricted) or an array of values. Backend enforces the same list;
   // these are for UX (pre-validate email domain, constrain country picker).
@@ -56,14 +40,12 @@ export const useAuthConfig = () => {
   }
 
   const labelFor = (k) => {
-    const { t } = useLang('web', 'auth')
     const en = { email: 'Email', phone: 'Phone', username: 'Username' }
     const ar = { email: 'البريد', phone: 'الهاتف', username: 'اسم المستخدم' }
     return en[k] ? t(`label_${k}`, en[k], ar[k]) : k
   }
   const inputTypeFor = (k) => ({ email: 'email', phone: 'tel', username: 'text' }[k] ?? 'text')
   const placeholderFor = (k) => {
-    const { t } = useLang('web', 'auth')
     const en = { email: 'm@example.com', phone: '+1234567890', username: 'jdoe' }
     const ar = { email: 'm@example.com', phone: '+9665XXXXXXXX', username: 'jdoe' }
     return en[k] ? t(`placeholder_${k}`, en[k], ar[k]) : ''
@@ -82,7 +64,6 @@ export const useAuthConfig = () => {
   }
 
   const identifierLabel = computed(() => {
-    const { t } = useLang('web', 'auth')
     const parts = identifiers.value.map(labelFor)
     const orWord = t('or', 'or', 'أو')
     let base = parts.length > 1 ? parts.join(` ${orWord} `) : parts[0] ?? labelFor('email')
@@ -107,9 +88,10 @@ export const useAuthConfig = () => {
   })
 
   return {
-    refresh,
-    cfg,
+    ...flags,
     identifiers,
+    identifierTypes,
+    defaultIdentifierType,
     isMultiIdentifier,
     hasUsername,
     hasEmail,
@@ -118,11 +100,6 @@ export const useAuthConfig = () => {
     socialAuthAvailable,
     maxSocialAccounts,
     isOtpWhatsapp,
-    multiSession,
-    appUsers,
-    appGuests,
-    authMode,
-    isOtpMode,
     allowedEmailDomains,
     allowedPhoneCountries,
     isEmailDomainAllowed,

@@ -1,210 +1,164 @@
 <template>
-  <div class="flex min-h-svh items-center justify-center bg-muted/40 p-6">
-    <Card class="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle class="text-2xl">{{ t('create_account', 'Create account', 'إنشاء حساب') }}</CardTitle>
-        <CardDescription>{{ t('register_description', 'Enter details below to register.', 'أدخل البيانات أدناه للتسجيل.') }}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form class="flex flex-col gap-4" @submit.prevent="onSubmit">
-          <div class="grid gap-2">
-            <Label for="name">{{ t('name', 'Name', 'الاسم') }}</Label>
-            <Input id="name" v-model="form.name" type="text" :placeholder="t('placeholder_name', 'John Doe', 'محمد أحمد')" required />
-            <span v-if="errors.name" class="text-red-500">{{ errors.name[0] }}</span>
-          </div>
+  <AuthCard
+    :title="t('create_account', 'Create account', 'إنشاء حساب')"
+    :description="t('register_description', 'Enter your details below to register.', 'أدخل بياناتك أدناه للتسجيل.')"
+  >
+    <form class="grid gap-4" @submit.prevent="onSubmit">
+      <FormField id="name" :label="t('name', 'Name', 'الاسم')" :error="form.first('name')">
+        <template #default="{ field }">
+          <Input v-model="fields.name" type="text" autocomplete="name" :placeholder="t('placeholder_name', 'John Doe', 'محمد أحمد')" v-bind="field" required />
+        </template>
+      </FormField>
 
-          <div v-if="isMultiIdentifier" class="grid gap-2">
-            <Label>{{ t('sign_up_with', 'Sign up with', 'سجّل عبر') }}</Label>
-            <div class="flex flex-wrap gap-2">
-              <Button
-                v-for="kind in identifiers"
-                :key="kind"
-                type="button"
-                size="sm"
-                :variant="identifierKind === kind ? 'default' : 'outline'"
-                @click="identifierKind = kind"
-              >
-                {{ labelFor(kind) }}
-              </Button>
-            </div>
-          </div>
+      <IdentifierKindPicker v-model="identifierKind" :kinds="identifiers" :label="t('sign_up_with', 'Sign up with', 'سجّل عبر')" />
 
-          <div class="grid gap-2">
-            <Label :for="identifierKind">{{ labelFor(identifierKind) }}</Label>
-            <Input
-              :id="identifierKind"
-              v-model="form.identifier"
-              :type="inputTypeFor(identifierKind)"
-              :placeholder="placeholderFor(identifierKind)"
-              required
-            />
-            <span
-              v-if="checking"
-              class="text-xs text-muted-foreground"
-            >{{ t('checking', 'Checking...', 'جارٍ التحقق...') }}</span>
-            <template v-else-if="identifierTaken">
-              <span class="text-xs text-red-500">
-                {{ t('identifier_already_taken', 'This :field is already in use.', 'هذا الـ:field مستخدم بالفعل.', { field: labelFor(identifierKind).toLowerCase() }) }}
-              </span>
-              <NuxtLink
-                to="/login"
-                class="text-xs font-medium underline-offset-4 hover:underline"
-              >{{ t('go_to_login', 'Go to login', 'الذهاب لتسجيل الدخول') }}</NuxtLink>
-            </template>
-            <span v-if="errors.identifier" class="text-red-500">{{ errors.identifier[0] }}</span>
-          </div>
+      <FormField id="identifier" :label="labelFor(identifierKind)" :error="form.first('identifier')" :hint="identifierHint">
+        <template #default="{ field }">
+          <IdentifierInput v-model="fields.identifier" :kind="identifierKind" v-bind="field" required />
+        </template>
+      </FormField>
+      <p v-if="check.checking.value" class="-mt-2 text-xs text-muted-foreground">{{ t('checking', 'Checking...', 'جارٍ التحقق...') }}</p>
+      <FormAlert v-else-if="identifierTaken" :message="t('identifier_already_taken', 'This :field is already in use.', 'هذا :field مستخدم بالفعل.', { field: labelFor(identifierKind).toLowerCase() })" />
 
-          <div v-if="showsExtraField('username')" class="grid gap-2">
-            <Label for="username">
-              {{ labelFor('username') }}
-              <span v-if="!isExtraRequired('username')" class="text-xs text-muted-foreground">{{ t('optional', '(optional)', '(اختياري)') }}</span>
-            </Label>
-            <Input id="username" v-model="form.username" type="text" :placeholder="placeholderFor('username')" :required="isExtraRequired('username')" />
-            <span v-if="errors.username" class="text-red-500">{{ errors.username[0] }}</span>
-          </div>
-          <div v-if="showsExtraField('email')" class="grid gap-2">
-            <Label for="email_extra">
-              {{ labelFor('email') }}
-              <span v-if="!isExtraRequired('email')" class="text-xs text-muted-foreground">{{ t('optional', '(optional)', '(اختياري)') }}</span>
-            </Label>
-            <Input id="email_extra" v-model="form.email" type="email" :placeholder="placeholderFor('email')" :required="isExtraRequired('email')" />
-            <span v-if="errors.email" class="text-red-500">{{ errors.email[0] }}</span>
-          </div>
-          <div v-if="showsExtraField('phone')" class="grid gap-2">
-            <Label for="phone_extra">
-              {{ labelFor('phone') }}
-              <span v-if="!isExtraRequired('phone')" class="text-xs text-muted-foreground">{{ t('optional', '(optional)', '(اختياري)') }}</span>
-            </Label>
-            <Input id="phone_extra" v-model="form.phone" type="tel" :placeholder="placeholderFor('phone')" :required="isExtraRequired('phone')" />
-            <span v-if="errors.phone" class="text-red-500">{{ errors.phone[0] }}</span>
-          </div>
+      <FormField v-if="showsExtraField('username')" id="username" :label="labelFor('username')" :optional="!isExtraRequired('username')" :error="form.first('username')">
+        <template #default="{ field }">
+          <Input v-model="fields.username" type="text" autocomplete="username" :placeholder="placeholderFor('username')" v-bind="field" :required="isExtraRequired('username')" />
+        </template>
+      </FormField>
+      <FormField v-if="showsExtraField('email')" id="email" :label="labelFor('email')" :optional="!isExtraRequired('email')" :error="form.first('email')">
+        <template #default="{ field }">
+          <Input v-model="fields.email" type="email" inputmode="email" autocomplete="email" :placeholder="placeholderFor('email')" v-bind="field" :required="isExtraRequired('email')" />
+        </template>
+      </FormField>
+      <FormField v-if="showsExtraField('phone')" id="phone" :label="labelFor('phone')" :optional="!isExtraRequired('phone')" :error="form.first('phone')">
+        <template #default="{ field }">
+          <AuthPhoneInput v-model="fields.phone" :allowed="allowedPhoneCountries" autocomplete="tel" v-bind="field" :required="isExtraRequired('phone')" />
+        </template>
+      </FormField>
 
-          <div class="grid gap-2">
-            <Label for="password">{{ t('password', 'Password', 'كلمة المرور') }}</Label>
-            <Input id="password" v-model="form.password" type="password" required />
-            <span v-if="errors.password" class="text-red-500">{{ errors.password[0] }}</span>
-          </div>
-          <div class="grid gap-2">
-            <Label for="confirm">{{ t('confirm_password', 'Confirm password', 'تأكيد كلمة المرور') }}</Label>
-            <Input id="confirm" v-model="form.password_confirmation" type="password" required />
-            <span v-if="errors.password_confirmation" class="text-red-500">{{ errors.password_confirmation[0] }}</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <Checkbox id="policy" v-model="form.policy_agreed" required />
-            <Label for="policy" class="text-sm font-normal">
-              {{ t('policy_agreement', 'I agree to the terms and privacy policy', 'أوافق على الشروط وسياسة الخصوصية') }}
-            </Label>
-            <span v-if="errors.policy_agreed" class="text-red-500">{{ errors.policy_agreed[0] }}</span>
-          </div>
-          <Button type="submit" class="w-full" :disabled="loading || identifierTaken || checking">
-            {{ loading ? t('creating', 'Creating...', 'جارٍ الإنشاء...') : t('create_account', 'Create account', 'إنشاء حساب') }}
-          </Button>
-        </form>
-      </CardContent>
-      <CardFooter class="justify-center text-sm">
-        <span class="text-muted-foreground">{{ t('have_account', 'Have account?', 'لديك حساب؟') }}&nbsp;</span>
-        <NuxtLink to="/login" class="font-medium underline-offset-4 hover:underline">
-          {{ t('sign_in', 'Sign in', 'تسجيل الدخول') }}
-        </NuxtLink>
-      </CardFooter>
-    </Card>
-  </div>
+      <FormField id="password" :label="t('password', 'Password', 'كلمة المرور')" :error="form.first('password')" :hint="t('password_hint', 'At least 8 characters.', '8 أحرف على الأقل.')">
+        <template #default="{ field }">
+          <AuthPasswordInput v-model="fields.password" autocomplete="new-password" minlength="8" v-bind="field" required />
+        </template>
+      </FormField>
+      <FormField id="password_confirmation" :label="t('confirm_password', 'Confirm password', 'تأكيد كلمة المرور')" :error="form.first('password_confirmation')">
+        <template #default="{ field }">
+          <AuthPasswordInput v-model="fields.password_confirmation" autocomplete="new-password" v-bind="field" required />
+        </template>
+      </FormField>
+
+      <div class="grid gap-2">
+        <div class="flex items-start gap-2">
+          <Checkbox id="policy" v-model="fields.policy_agreed" class="mt-0.5" :aria-invalid="form.first('policy_agreed') ? true : undefined" aria-describedby="policy-error" />
+          <Label for="policy" class="text-sm font-normal leading-snug">
+            {{ t('policy_agreement', 'I agree to the terms and privacy policy', 'أوافق على الشروط وسياسة الخصوصية') }}
+          </Label>
+        </div>
+        <p v-if="form.first('policy_agreed')" id="policy-error" role="alert" class="text-xs text-destructive">{{ form.first('policy_agreed') }}</p>
+      </div>
+
+      <FormAlert :message="form.message.value" />
+
+      <Button type="submit" class="w-full" :disabled="loading || identifierTaken || check.checking.value">
+        <LucideLoaderCircle v-if="loading" class="size-4 animate-spin" />
+        {{ loading ? t('creating', 'Creating...', 'جارٍ الإنشاء...') : t('create_account', 'Create account', 'إنشاء حساب') }}
+      </Button>
+    </form>
+
+    <template #footer>
+      <span class="text-muted-foreground">{{ t('have_account', 'Already have an account?', 'لديك حساب بالفعل؟') }}</span>
+      <NuxtLink to="/login" class="font-medium underline-offset-4 hover:underline">{{ t('sign_in', 'Sign in', 'تسجيل الدخول') }}</NuxtLink>
+    </template>
+  </AuthCard>
 </template>
 
 <script setup>
 definePageMeta({
+  layout: 'auth',
   middleware: ['auth-mode', 'require-pre-auth', 'password-mode-only'],
-  name: 'register'
+  name: 'register',
 })
 
-const { identifiers, isMultiIdentifier, showsExtraField, isExtraRequired, inputTypeFor, placeholderFor, labelFor } = useAuthConfig()
 const { t } = useLang('web', 'auth')
+useHead({ title: t('create_account', 'Create account', 'إنشاء حساب') })
 
-const errors = ref({})
-const loading = ref(false)
-const checking = ref(false)
-const identifierTaken = ref(false)
-
+const {
+  identifiers, showsExtraField, isExtraRequired, placeholderFor, labelFor,
+  allowedPhoneCountries, allowedEmailDomains, isEmailDomainAllowed,
+} = useAuthConfig()
 const client = useApi()
 const { user, login } = useSanctumAuth()
+const { applyLogin } = useAuthSession()
+const { deviceMeta } = useDevice()
 
 const identifierKind = ref(identifiers.value[0] ?? 'email')
 watch(identifiers, (list) => {
-  if (list.length && !list.includes(identifierKind.value)) {
-    identifierKind.value = list[0]
-  }
+  if (list.length && !list.includes(identifierKind.value)) identifierKind.value = list[0]
 }, { immediate: true })
 
-const form = ref({
-  name: '',
-  identifier: '',
-  username: '',
-  email: '',
-  phone: '',
-  password: '',
-  password_confirmation: '',
-  policy_agreed: false
+const fields = reactive({
+  name: '', identifier: '', username: '', email: '', phone: '',
+  password: '', password_confirmation: '', policy_agreed: false,
 })
+const loading = ref(false)
+const form = useFormErrors(['name', 'identifier', 'username', 'email', 'phone', 'password', 'password_confirmation', 'policy_agreed'])
 
-let debounce = null
-watch(() => form.value.identifier, (val) => {
-  identifierTaken.value = false
-  if (debounce) clearTimeout(debounce)
-  if (!val || val.length < 3) {
-    checking.value = false
-    return
-  }
-  checking.value = true
-  debounce = setTimeout(async () => {
-    try {
-      const res = await client('/api/check-identifier', {
-        method: 'POST',
-        body: { identifier: val }
-      })
-      const data = res?.data ?? res ?? {}
-      identifierTaken.value = !!data.exists
-    } catch {
-      identifierTaken.value = false
-    } finally {
-      checking.value = false
-    }
-  }, 500)
-})
+const identifierRef = toRef(fields, 'identifier')
+const check = useIdentifierCheck(identifierRef, identifierKind)
+// Pre-submit uniqueness: any existing row counts as taken, whatever its state.
+const identifierTaken = computed(() => !!check.result.value?.exists)
 
-onUnmounted(() => {
-  if (debounce) clearTimeout(debounce)
+const identifierHint = computed(() => {
+  if (identifierKind.value !== 'email' || !Array.isArray(allowedEmailDomains.value)) return ''
+  return t('allowed_email_domains_hint', 'Accepted: :domains', 'المقبول: :domains', { domains: allowedEmailDomains.value.join(', ') })
 })
 
 const buildBody = () => {
   const body = {
-    name: form.value.name,
-    identifier: form.value.identifier,
-    password: form.value.password,
-    password_confirmation: form.value.password_confirmation,
-    policy_agreed: form.value.policy_agreed,
+    name: fields.name,
+    identifier: fields.identifier,
+    // The API never infers the kind from the value — the picker (or the single
+    // configured identifier) is what says whether this is an email or a phone.
+    type: identifierKind.value,
+    password: fields.password,
+    password_confirmation: fields.password_confirmation,
+    policy_agreed: fields.policy_agreed,
+    ...deviceMeta(),
   }
-  const include = (kind) => {
-    if (!showsExtraField(kind)) return false
-    if (isExtraRequired(kind)) return true
-    return !!form.value[kind]
-  }
-  if (include('username')) body.username = form.value.username
-  if (include('email')) body.email = form.value.email
-  if (include('phone')) body.phone = form.value.phone
+  const include = (kind) => showsExtraField(kind) && (isExtraRequired(kind) || !!fields[kind])
+  if (include('username')) body.username = fields.username
+  if (include('email')) body.email = fields.email
+  if (include('phone')) body.phone = fields.phone
   return body
 }
 
+const validate = () => {
+  const errors = {}
+  if (!fields.policy_agreed) errors.policy_agreed = [t('policy_required', 'You must accept the terms to continue.', 'يجب الموافقة على الشروط للمتابعة.')]
+  if (fields.password !== fields.password_confirmation) errors.password_confirmation = [t('password_mismatch', 'Passwords do not match.', 'كلمتا المرور غير متطابقتين.')]
+  const emailValue = identifierKind.value === 'email' ? fields.identifier : (showsExtraField('email') ? fields.email : '')
+  if (emailValue && !isEmailDomainAllowed(emailValue)) {
+    errors[identifierKind.value === 'email' ? 'identifier' : 'email'] = [t('email_domain_not_allowed', 'Email must be from: :domains', 'يجب أن يكون البريد من: :domains', { domains: allowedEmailDomains.value.join(', ') })]
+  }
+  form.errors.value = errors
+  return !Object.keys(errors).length
+}
+
 const onSubmit = async () => {
-  errors.value = {}
+  form.clear()
+  if (!validate()) return
   loading.value = true
-  const body = buildBody()
   try {
-    await client('/api/register', { method: 'POST', body })
+    const res = await client('/api/register', { method: 'POST', body: buildBody() })
     if (user.value?.data?.is_guest) user.value = null
-    await login({ identifier: form.value.identifier, password: form.value.password })
-    navigateTo({ name: 'home' })
+    if (res?.token ?? res?.data?.token) {
+      await applyLogin(res)
+    } else {
+      await login({ identifier: fields.identifier, type: identifierKind.value, password: fields.password, ...deviceMeta() }, true)
+    }
+    await navigateTo({ name: 'home' })
   } catch (error) {
-    errors.value = error.data?.errors ?? {}
+    form.set(error)
   } finally {
     loading.value = false
   }

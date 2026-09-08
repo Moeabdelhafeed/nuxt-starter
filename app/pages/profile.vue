@@ -1,637 +1,414 @@
 <template>
-  <div class="min-h-svh bg-muted/40 p-6">
-    <div class="mx-auto flex max-w-2xl flex-col gap-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-2xl font-bold">{{ t('profile', 'Profile', 'الملف الشخصي') }}</h1>
-          <p class="text-sm text-muted-foreground">{{ t('manage_your_account', 'Manage your account.', 'إدارة حسابك.') }}</p>
+  <div class="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div class="flex items-center gap-4">
+        <div class="flex size-14 items-center justify-center rounded-full bg-primary/10 text-xl font-semibold text-primary" aria-hidden="true">
+          {{ initials }}
         </div>
-        <div class="flex gap-2">
-          <Button variant="outline" as-child>
-            <NuxtLink to="/">{{ t('home', 'Home', 'الرئيسية') }}</NuxtLink>
-          </Button>
-          <Button v-if="multiSession" variant="outline" as-child>
-            <NuxtLink to="/devices">{{ t('active_devices', 'Active devices', 'الأجهزة النشطة') }}</NuxtLink>
-          </Button>
-          <Button
-            variant="destructive"
-            :disabled="loggingOut"
-            @click="handleLogout"
-          >{{ loggingOut ? t('logging_out', 'Logging out...', 'جارٍ تسجيل الخروج...') : t('logout', 'Logout', 'تسجيل الخروج') }}</Button>
+        <div>
+          <h1 class="text-2xl font-bold">{{ profile?.name || t('profile', 'Profile', 'الملف الشخصي') }}</h1>
+          <p class="text-sm text-muted-foreground">{{ primaryIdentifier }}</p>
+          <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
+            <span v-if="isVerified" class="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 font-medium text-success">
+              <LucideShieldCheck class="size-3" /> {{ t('verified', 'Verified', 'موثّق') }}
+            </span>
+            <span v-if="profile?.created_at" class="text-muted-foreground">{{ t('member_since', 'Member since :date', 'عضو منذ :date', { date: formatDateOnly(profile.created_at) }) }}</span>
+          </div>
         </div>
       </div>
+      <Button v-if="multiSession" variant="outline" size="sm" as-child>
+        <NuxtLink to="/devices"><LucideMonitorSmartphone class="size-4" /> {{ t('active_devices', 'Active devices', 'الأجهزة النشطة') }}</NuxtLink>
+      </Button>
+    </div>
 
+    <div class="mt-8 grid gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>{{ t('account_info', 'Account info', 'معلومات الحساب') }}</CardTitle>
-          <CardDescription>{{ t('account_info_description', 'Your current account record.', 'بيانات حسابك الحالية.') }}</CardDescription>
+          <CardTitle as="h2">{{ t('update_profile', 'Profile details', 'بيانات الملف') }}</CardTitle>
+          <CardDescription>{{ t('update_profile_description', 'Change how your account appears.', 'غيّر بيانات حسابك.') }}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div v-if="profile" class="flex flex-col gap-2 text-sm">
-            <div
-              v-for="[key, value] in entries"
-              :key="key"
-              class="flex justify-between gap-4 border-b pb-2 last:border-0"
-            >
-              <span
-                class="font-medium capitalize text-muted-foreground"
-              >{{ key.replace(/_/g, ' ') }}</span>
-              <span class="text-right break-all">{{ formatValue(value) }}</span>
+          <form class="grid gap-4" @submit.prevent="onUpdateProfile">
+            <FormField id="name" :label="t('name', 'Name', 'الاسم')" :error="profileForm.first('name')">
+              <template #default="{ field }">
+                <Input v-model="profileFields.name" type="text" autocomplete="name" v-bind="field" required />
+              </template>
+            </FormField>
+            <FormField v-if="hasUsername" id="username" :label="labelFor('username')" :optional="!isExtraRequired('username')" :error="profileForm.first('username')">
+              <template #default="{ field }">
+                <Input v-model="profileFields.username" type="text" autocomplete="username" :placeholder="placeholderFor('username')" v-bind="field" />
+              </template>
+            </FormField>
+            <FormField v-if="hasEmail" id="email" :label="labelFor('email')" :optional="!isExtraRequired('email')" :error="profileForm.first('email')">
+              <template #default="{ field }">
+                <Input v-model="profileFields.email" type="email" inputmode="email" autocomplete="email" :placeholder="placeholderFor('email')" v-bind="field" />
+              </template>
+            </FormField>
+            <FormField v-if="hasPhone" id="phone" :label="labelFor('phone')" :optional="!isExtraRequired('phone')" :error="profileForm.first('phone')">
+              <template #default="{ field }">
+                <AuthPhoneInput v-model="profileFields.phone" :allowed="allowedPhoneCountries" autocomplete="tel" v-bind="field" />
+              </template>
+            </FormField>
+            <FormAlert :message="profileForm.message.value" />
+            <div>
+              <Button type="submit" :disabled="profileLoading">
+                <LucideLoaderCircle v-if="profileLoading" class="size-4 animate-spin" />
+                {{ profileLoading ? t('saving', 'Saving...', 'جارٍ الحفظ...') : t('save_changes', 'Save changes', 'حفظ التغييرات') }}
+              </Button>
             </div>
-          </div>
-          <p v-else class="text-sm text-muted-foreground">{{ t('loading', 'Loading...', 'جارٍ التحميل...') }}</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{{ t('update_profile', 'Update profile', 'تحديث الملف') }}</CardTitle>
-          <CardDescription>{{ t('update_profile_description', 'Change your account details.', 'غيّر بيانات حسابك.') }}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form class="flex flex-col gap-4" @submit.prevent="onUpdateProfile">
-            <div class="grid gap-2">
-              <Label for="name">{{ t('name', 'Name', 'الاسم') }}</Label>
-              <Input id="name" v-model="profileForm.name" type="text" />
-              <span
-                v-if="profileErrors.name"
-                class="text-xs text-red-500"
-              >{{ profileErrors.name[0] }}</span>
-            </div>
-
-            <div v-if="hasUsername" class="grid gap-2">
-              <Label for="profile_username">
-                {{ labelFor('username') }}
-                <span
-                  v-if="!isExtraRequired('username')"
-                  class="text-xs text-muted-foreground"
-                >{{ t('optional', '(optional)', '(اختياري)') }}</span>
-              </Label>
-              <Input
-                id="profile_username"
-                v-model="profileForm.username"
-                type="text"
-                :placeholder="placeholderFor('username')"
-              />
-              <span
-                v-if="profileErrors.username"
-                class="text-xs text-red-500"
-              >{{ profileErrors.username[0] }}</span>
-            </div>
-
-            <div v-if="hasEmail" class="grid gap-2">
-              <Label for="profile_email">
-                {{ labelFor('email') }}
-                <span
-                  v-if="!isExtraRequired('email')"
-                  class="text-xs text-muted-foreground"
-                >{{ t('optional', '(optional)', '(اختياري)') }}</span>
-              </Label>
-              <Input
-                id="profile_email"
-                v-model="profileForm.email"
-                type="email"
-                :placeholder="placeholderFor('email')"
-              />
-              <span
-                v-if="profileErrors.email"
-                class="text-xs text-red-500"
-              >{{ profileErrors.email[0] }}</span>
-            </div>
-
-            <div v-if="hasPhone" class="grid gap-2">
-              <Label for="profile_phone">
-                {{ labelFor('phone') }}
-                <span
-                  v-if="!isExtraRequired('phone')"
-                  class="text-xs text-muted-foreground"
-                >{{ t('optional', '(optional)', '(اختياري)') }}</span>
-              </Label>
-              <Input
-                id="profile_phone"
-                v-model="profileForm.phone"
-                type="tel"
-                :placeholder="placeholderFor('phone')"
-              />
-              <span
-                v-if="profileErrors.phone"
-                class="text-xs text-red-500"
-              >{{ profileErrors.phone[0] }}</span>
-            </div>
-
-            <p v-if="profileSaved" class="text-xs text-green-600">{{ t('saved', 'Saved.', 'تم الحفظ.') }}</p>
-            <Button
-              type="submit"
-              :disabled="profileLoading"
-            >{{ profileLoading ? t('saving', 'Saving...', 'جارٍ الحفظ...') : t('save_changes', 'Save changes', 'حفظ التغييرات') }}</Button>
           </form>
         </CardContent>
       </Card>
 
       <Card v-if="!isOtpMode">
         <CardHeader>
-          <CardTitle>{{ hasPassword ? t('change_password', 'Change password', 'تغيير كلمة المرور') : t('set_password', 'Set password', 'تعيين كلمة المرور') }}</CardTitle>
-          <CardDescription>{{ hasPassword ? t('change_password_description', 'Revokes all other sessions.', 'يلغي كل الجلسات الأخرى.') : t('set_password_description', 'Add a password so you can log in without a social provider.', 'أضف كلمة مرور لتسجيل الدخول بدون مزوّد اجتماعي.') }}</CardDescription>
+          <CardTitle as="h2">{{ hasPassword ? t('change_password', 'Change password', 'تغيير كلمة المرور') : t('set_password', 'Set a password', 'تعيين كلمة مرور') }}</CardTitle>
+          <CardDescription>{{ hasPassword ? t('change_password_description', 'Changing your password signs you out of other devices.', 'تغيير كلمة المرور يُخرجك من الأجهزة الأخرى.') : t('set_password_description', 'Add a password so you can sign in without a social provider.', 'أضف كلمة مرور لتسجيل الدخول بدون مزوّد اجتماعي.') }}</CardDescription>
         </CardHeader>
         <CardContent>
-          <form class="flex flex-col gap-4" @submit.prevent="onChangePassword">
-            <div v-if="hasPassword" class="grid gap-2">
-              <Label for="old_password">{{ t('current_password', 'Current password', 'كلمة المرور الحالية') }}</Label>
-              <Input
-                id="old_password"
-                v-model="passwordForm.old_password"
-                type="password"
-                required
-              />
-              <span
-                v-if="passwordErrors.old_password"
-                class="text-xs text-red-500"
-              >{{ passwordErrors.old_password[0] }}</span>
+          <form class="grid gap-4" @submit.prevent="onChangePassword">
+            <FormField v-if="hasPassword" id="old_password" :label="t('current_password', 'Current password', 'كلمة المرور الحالية')" :error="passwordForm.first('old_password')">
+              <template #default="{ field }">
+                <AuthPasswordInput v-model="passwordFields.old_password" autocomplete="current-password" v-bind="field" required />
+              </template>
+            </FormField>
+            <FormField id="new_password" :label="t('new_password', 'New password', 'كلمة مرور جديدة')" :error="passwordForm.first('password')" :hint="t('password_hint', 'At least 8 characters.', '8 أحرف على الأقل.')">
+              <template #default="{ field }">
+                <AuthPasswordInput v-model="passwordFields.password" autocomplete="new-password" minlength="8" v-bind="field" required />
+              </template>
+            </FormField>
+            <FormField id="confirm_password" :label="t('confirm_password', 'Confirm password', 'تأكيد كلمة المرور')" :error="passwordForm.first('password_confirmation')">
+              <template #default="{ field }">
+                <AuthPasswordInput v-model="passwordFields.password_confirmation" autocomplete="new-password" v-bind="field" required />
+              </template>
+            </FormField>
+            <FormAlert :message="passwordForm.message.value" />
+            <div>
+              <Button type="submit" :disabled="passwordLoading">
+                <LucideLoaderCircle v-if="passwordLoading" class="size-4 animate-spin" />
+                {{ passwordLoading ? t('updating', 'Updating...', 'جارٍ التحديث...') : t('update_password', 'Update password', 'تحديث كلمة المرور') }}
+              </Button>
             </div>
-            <div class="grid gap-2">
-              <Label for="new_password">{{ t('new_password', 'New password', 'كلمة مرور جديدة') }}</Label>
-              <Input id="new_password" v-model="passwordForm.password" type="password" required />
-              <span
-                v-if="passwordErrors.password"
-                class="text-xs text-red-500"
-              >{{ passwordErrors.password[0] }}</span>
-            </div>
-            <div class="grid gap-2">
-              <Label for="confirm_password">{{ t('confirm_password', 'Confirm password', 'تأكيد كلمة المرور') }}</Label>
-              <Input
-                id="confirm_password"
-                v-model="passwordForm.password_confirmation"
-                type="password"
-                required
-              />
-              <span
-                v-if="passwordErrors.password_confirmation"
-                class="text-xs text-red-500"
-              >{{ passwordErrors.password_confirmation[0] }}</span>
-            </div>
-            <p v-if="passwordSaved" class="text-xs text-green-600">{{ t('password_updated', 'Password updated.', 'تم تحديث كلمة المرور.') }}</p>
-            <Button
-              type="submit"
-              :disabled="passwordLoading"
-            >{{ passwordLoading ? t('updating', 'Updating...', 'جارٍ التحديث...') : t('update_password', 'Update password', 'تحديث كلمة المرور') }}</Button>
           </form>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>{{ t('change_kind', 'Change :kind', 'تغيير :kind', { kind: identifierKindLabel.toLowerCase() }) }}</CardTitle>
-          <CardDescription>{{ t('change_kind_description', 'OTP-protected :kind change.', 'تغيير :kind محمي برمز.', { kind: identifierKindLabel.toLowerCase() }) }}</CardDescription>
+          <CardTitle as="h2">{{ t('change_kind', 'Change :kind', 'تغيير :kind', { kind: identifierKindLabel.toLowerCase() }) }}</CardTitle>
+          <CardDescription>{{ t('change_kind_description', 'We will send a verification code to the new :kind.', 'سنرسل رمز تحقق إلى :kind الجديد.', { kind: identifierKindLabel.toLowerCase() }) }}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div class="flex flex-col gap-4">
-            <div v-if="isMultiIdentifier" class="grid gap-2">
-              <Label>{{ t('change_which', 'Change which', 'تغيير ماذا') }}</Label>
-              <div class="flex flex-wrap gap-2">
-                <Button
-                  v-for="kind in identifiers"
-                  :key="kind"
-                  type="button"
-                  size="sm"
-                  :variant="identifierKind === kind ? 'default' : 'outline'"
-                  @click="identifierKind = kind"
-                >{{ labelFor(kind) }}</Button>
-              </div>
-            </div>
-            <div class="grid gap-2">
-              <Label for="new_identifier">{{ t('new_kind', 'New :kind', ':kind جديد', { kind: identifierKindLabel.toLowerCase() }) }}</Label>
-              <Input
-                id="new_identifier"
-                v-model="identifierForm.new_identifier"
-                :type="inputTypeFor(identifierKind)"
-                :placeholder="placeholderFor(identifierKind)"
-              />
-              <span
-                v-if="identifierErrors.new_identifier"
-                class="text-xs text-red-500"
-              >{{ identifierErrors.new_identifier[0] }}</span>
-            </div>
-            <Button
-              :disabled="identifierLoading || otpSent"
-              @click="onRequestIdentifierChange"
-            >{{ identifierLoading ? t('sending', 'Sending...', 'جارٍ الإرسال...') : (otpSent ? t('otp_sent', 'OTP sent', 'تم إرسال الرمز') : t('send_otp', 'Send OTP', 'إرسال الرمز')) }}</Button>
+          <form class="grid gap-4" @submit.prevent="otpSent ? onVerifyIdentifierChange() : onRequestIdentifierChange()">
+            <IdentifierKindPicker v-if="!otpSent" v-model="identifierKind" :kinds="identifiers" :label="t('change_which', 'What do you want to change?', 'ما الذي تريد تغييره؟')" />
+            <FormField id="new_identifier" :label="t('new_kind', 'New :kind', ':kind الجديد', { kind: identifierKindLabel.toLowerCase() })" :error="identifierForm.first('new_identifier') || identifierForm.first('type')">
+              <template #default="{ field }">
+                <IdentifierInput v-model="identifierFields.new_identifier" :kind="identifierKind" :disabled="otpSent" v-bind="field" required />
+              </template>
+            </FormField>
 
-            <div v-if="otpSent" class="flex flex-col gap-4 border-t pt-4">
-              <div class="grid gap-2">
-                <Label for="identifier_otp">{{ t('otp', 'OTP', 'الرمز') }}</Label>
-                <Input
-                  id="identifier_otp"
-                  v-model="identifierForm.otp"
-                  type="text"
-                  inputmode="numeric"
-                  placeholder="123456"
-                />
-                <span
-                  v-if="identifierErrors.otp"
-                  class="text-xs text-red-500"
-                >{{ identifierErrors.otp[0] }}</span>
+            <template v-if="otpSent">
+              <div class="grid gap-2 border-t pt-4">
+                <Label for="identifier_otp">{{ t('otp', 'Verification code', 'رمز التحقق') }}</Label>
+                <AuthOtpInput id="identifier_otp" v-model="identifierFields.otp" :disabled="identifierVerifying" />
+                <p v-if="identifierForm.first('otp')" role="alert" class="text-center text-xs text-destructive">{{ identifierForm.first('otp') }}</p>
               </div>
-              <p
-                v-if="identifierSaved"
-                class="text-xs text-green-600"
-              >{{ t('kind_updated', ':kind updated.', 'تم تحديث :kind.', { kind: identifierKindLabel }) }}</p>
-              <Button
-                :disabled="identifierVerifying"
-                @click="onVerifyIdentifierChange"
-              >{{ identifierVerifying ? t('verifying', 'Verifying...', 'جارٍ التحقق...') : t('verify_and_save', 'Verify & save', 'تحقق واحفظ') }}</Button>
-              <button
-                type="button"
-                class="text-xs text-muted-foreground underline-offset-4 hover:underline"
-                @click="otpSent = false"
-              >{{ t('cancel', 'Cancel', 'إلغاء') }}</button>
+            </template>
+
+            <FormAlert :message="identifierForm.message.value" />
+
+            <div class="flex flex-wrap items-center gap-3">
+              <Button type="submit" :disabled="identifierLoading || identifierVerifying || (otpSent && identifierFields.otp.length < 6)">
+                <LucideLoaderCircle v-if="identifierLoading || identifierVerifying" class="size-4 animate-spin" />
+                {{ otpSent
+                  ? (identifierVerifying ? t('verifying', 'Verifying...', 'جارٍ التحقق...') : t('verify_and_save', 'Verify & save', 'تحقق واحفظ'))
+                  : (identifierLoading ? t('sending', 'Sending...', 'جارٍ الإرسال...') : t('send_code', 'Send code', 'إرسال الرمز')) }}
+              </Button>
+              <template v-if="otpSent">
+                <ResendCodeButton class="text-sm" :cooldown="identifierCooldown" :busy="identifierLoading || identifierVerifying" @resend="onRequestIdentifierChange" />
+                <button type="button" class="text-sm text-muted-foreground underline-offset-4 hover:underline" @click="cancelIdentifierChange">{{ t('cancel', 'Cancel', 'إلغاء') }}</button>
+              </template>
             </div>
-          </div>
+          </form>
         </CardContent>
       </Card>
 
       <Card v-if="socialAuthAvailable && socialProviders.length">
         <CardHeader>
-          <CardTitle>{{ t('social_accounts', 'Social accounts', 'الحسابات الاجتماعية') }}</CardTitle>
-          <CardDescription>
-            {{ t('manage_social_providers', 'Connect or disconnect providers linked to your account.', 'اربط أو افصل المزودين المرتبطين بحسابك.') }}
-          </CardDescription>
+          <CardTitle as="h2">{{ t('social_accounts', 'Social accounts', 'الحسابات الاجتماعية') }}</CardTitle>
+          <CardDescription>{{ t('manage_social_providers', 'Connect or disconnect providers linked to your account.', 'اربط أو افصل المزودين المرتبطين بحسابك.') }}</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div class="flex flex-col gap-3">
-            <p
-              v-if="!hasPassword"
-              class="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
-            >
-              {{ t('set_password_cta', 'Set a password to enable email/password login and to allow disconnecting your last social provider.', 'عيّن كلمة مرور لتفعيل تسجيل الدخول بالبريد/كلمة المرور وللسماح بفك ربط آخر مزوّد اجتماعي.') }}
-            </p>
-            <div v-if="socialLoading" class="text-sm text-muted-foreground">{{ t('loading', 'Loading...', 'جارٍ التحميل...') }}</div>
-            <ul v-else class="flex flex-col gap-2">
-              <li
-                v-for="p in socialProviders"
-                :key="p"
-                class="flex items-center justify-between rounded-md border p-3 text-sm"
+        <CardContent class="grid gap-3">
+          <FormAlert v-if="!hasPassword" variant="warning" :message="t('set_password_cta', 'Set a password to sign in without a provider and to be able to disconnect your last one.', 'عيّن كلمة مرور لتسجيل الدخول بدون مزوّد ولتتمكن من فك ربط آخر مزوّد.')" />
+          <ul v-if="socialLoading" class="grid gap-2" aria-busy="true">
+            <li v-for="i in socialProviders.length" :key="i" class="flex items-center justify-between rounded-md border p-3">
+              <AppSkeleton class="h-4 w-28" /><AppSkeleton class="h-8 w-20" />
+            </li>
+          </ul>
+          <ul v-else class="grid gap-2">
+            <li v-for="p in socialProviders" :key="p" class="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+              <div class="min-w-0">
+                <p class="font-medium">{{ providerLabel(p, code) }}</p>
+                <p v-if="findLinked(p)" class="truncate text-xs text-muted-foreground">{{ findLinked(p).email ?? findLinked(p).name }}</p>
+              </div>
+              <Button
+                v-if="findLinked(p)"
+                variant="outline"
+                size="sm"
+                :disabled="unlinking === p || (linkedProviders.length === 1 && !hasPassword)"
+                @click="onUnlinkSocial(p)"
               >
-                <div class="flex flex-col">
-                  <span class="font-medium">{{ providerLabel(p) }}</span>
-                  <span v-if="findLinked(p)" class="text-xs text-muted-foreground">{{ findLinked(p).email ?? findLinked(p).name }}</span>
-                </div>
-                <template v-if="findLinked(p)">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    :disabled="unlinking === p || (linkedProviders.length === 1 && !hasPassword)"
-                    @click="onUnlinkSocial(p)"
-                  >{{ unlinking === p ? t('unlinking', 'Unlinking...', 'جارٍ فك الربط...') : t('disconnect', 'Disconnect', 'فك الربط') }}</Button>
-                </template>
-                <template v-else>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    :disabled="!canLinkMore || connecting === p"
-                    @click="onConnectProvider(p)"
-                  >{{ connecting === p ? t('connecting', 'Connecting...', 'جارٍ الربط...') : t('connect', 'Connect', 'ربط') }}</Button>
-                </template>
-              </li>
-            </ul>
-            <p
-              v-if="!canLinkMore && maxSocialAccounts > 0"
-              class="text-xs text-muted-foreground"
-            >{{ t('linked_accounts_limit_reached', 'Linked accounts limit reached (:max).', 'تم بلوغ الحد الأقصى للحسابات المربوطة (:max).', { max: maxSocialAccounts }) }}</p>
-            <span v-if="socialErrors.token" class="text-xs text-red-500">{{ socialErrorText('token') }}</span>
-            <span v-if="socialErrors.provider" class="text-xs text-red-500">{{ socialErrorText('provider') }}</span>
-          </div>
+                <LucideLoaderCircle v-if="unlinking === p" class="size-4 animate-spin" />
+                {{ t('disconnect', 'Disconnect', 'فك الربط') }}
+              </Button>
+              <Button v-else size="sm" :disabled="!canLinkMore || connecting === p" @click="onConnectProvider(p)">
+                <LucideLoaderCircle v-if="connecting === p" class="size-4 animate-spin" />
+                {{ t('connect', 'Connect', 'ربط') }}
+              </Button>
+            </li>
+          </ul>
+          <p v-if="!canLinkMore && maxSocialAccounts > 0" class="text-xs text-muted-foreground">
+            {{ t('linked_accounts_limit_reached', 'Linked accounts limit reached (:max).', 'تم بلوغ الحد الأقصى للحسابات المربوطة (:max).', { max: maxSocialAccounts }) }}
+          </p>
+          <FormAlert :message="socialError" />
         </CardContent>
       </Card>
 
-      <Card class="border-destructive">
+      <Card class="border-destructive/40">
         <CardHeader>
-          <CardTitle class="text-destructive">{{ t('danger_zone', 'Danger zone', 'منطقة الخطر') }}</CardTitle>
-          <CardDescription>{{ t('delete_account_description', 'Permanently delete your account.', 'حذف حسابك نهائيًا.') }}</CardDescription>
+          <CardTitle as="h2" class="text-destructive">{{ t('danger_zone', 'Danger zone', 'منطقة الخطر') }}</CardTitle>
+          <CardDescription>{{ t('delete_account_description', 'Delete your account and all of its data.', 'احذف حسابك وجميع بياناته.') }}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button
-            variant="destructive"
-            :disabled="deleting"
-            @click="deleteDialogOpen = true"
-          >{{ deleting ? t('deleting', 'Deleting...', 'جارٍ الحذف...') : t('delete_account', 'Delete account', 'حذف الحساب') }}</Button>
+          <Button variant="destructive" :disabled="deleting" @click="deleteDialogOpen = true">
+            {{ t('delete_account', 'Delete account', 'حذف الحساب') }}
+          </Button>
         </CardContent>
       </Card>
     </div>
 
-    <Teleport to="body">
-      <div
-        v-if="deleteDialogOpen"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4"
-        role="dialog"
-        aria-modal="true"
-      >
-        <div
-          class="absolute inset-0 bg-black/50"
-          @click="deleting || (deleteDialogOpen = false)"
-        />
-        <div class="relative w-full max-w-md rounded-lg border bg-background p-6 shadow-lg">
-          <h2 class="text-lg font-semibold text-destructive">
-            {{ t('delete_account', 'Delete account', 'حذف الحساب') }}
-          </h2>
-          <p class="mt-2 text-sm text-muted-foreground">
-            {{ t('delete_account_confirm', 'Permanently delete your account? This cannot be undone.', 'حذف الحساب نهائيًا؟ لا يمكن التراجع.') }}
-          </p>
-          <div class="mt-6 flex justify-end gap-2">
-            <Button variant="outline" :disabled="deleting" @click="deleteDialogOpen = false">
-              {{ t('cancel', 'Cancel', 'إلغاء') }}
-            </Button>
-            <Button variant="destructive" :disabled="deleting" @click="confirmDeleteAccount">
-              {{ deleting ? t('deleting', 'Deleting...', 'جارٍ الحذف...') : t('delete_account', 'Delete account', 'حذف الحساب') }}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <ConfirmDialog
+      v-model:open="deleteDialogOpen"
+      destructive
+      :title="t('delete_account', 'Delete account', 'حذف الحساب')"
+      :description="t('delete_account_confirm', 'Your account will be scheduled for deletion. Signing in again before then restores it.', 'سيتم جدولة حسابك للحذف. تسجيل الدخول مجددًا قبل ذلك يستعيده.')"
+      :confirm-label="t('delete_account', 'Delete account', 'حذف الحساب')"
+      :loading="deleting"
+      @confirm="confirmDeleteAccount"
+    >
+      <FormAlert :message="deleteError" />
+    </ConfirmDialog>
   </div>
 </template>
 
 <script setup>
 definePageMeta({
   middleware: ['auth-mode', 'require-registered', 'verified'],
-  name: 'profile'
+  name: 'profile',
 })
 
-const { user, logout, refreshIdentity } = useSanctumAuth()
+const { t, code } = useLang('web', 'profile')
+useHead({ title: t('profile', 'Profile', 'الملف الشخصي') })
+
 const client = useApi()
 const {
-  identifiers,
-  isMultiIdentifier,
-  hasUsername,
-  hasEmail,
-  hasPhone,
-  isExtraRequired,
-  labelFor,
-  inputTypeFor,
-  placeholderFor,
-  socialAuthAvailable,
-  socialProviders,
-  maxSocialAccounts,
-  multiSession,
-  isOtpMode,
+  identifiers, hasUsername, hasEmail, hasPhone, isExtraRequired, labelFor, placeholderFor,
+  socialAuthAvailable, socialProviders, maxSocialAccounts, multiSession, isOtpMode, allowedPhoneCountries,
 } = useAuthConfig()
-const { t } = useLang('web', 'profile')
+const { profile, isVerified, refreshIdentity, signOut } = useAuthSession()
+const { formatDateOnly } = useDateFormat()
 const { signInWithProvider } = useFirebaseAuth()
+const { toast } = useToast()
 
-const identifierKind = ref(identifiers.value[0] ?? 'email')
-watch(identifiers, (list) => {
-  if (list.length && !list.includes(identifierKind.value)) {
-    identifierKind.value = list[0]
-  }
-}, { immediate: true })
+const initials = computed(() => (profile.value?.name ?? '')
+  .split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?')
+const primaryIdentifier = computed(() => identifiers.value.map((kind) => profile.value?.[kind]).find(Boolean) ?? profile.value?.username ?? '')
+const hasPassword = computed(() => !!profile.value?.has_password)
 
-const identifierKindLabel = computed(() => labelFor(identifierKind.value))
-
-const profile = computed(() => user.value?.data ?? user.value ?? null)
-
-const entries = computed(() => {
-  if (!profile.value) return []
-  return Object.entries(profile.value).filter(([, v]) => typeof v !== 'object' || v === null)
-})
-
-const formatValue = (v) => {
-  if (v === null || v === undefined || v === '') return '—'
-  if (typeof v === 'boolean') return v ? 'Yes' : 'No'
-  return String(v)
-}
-
-const loggingOut = ref(false)
-const handleLogout = async () => {
-  loggingOut.value = true
-  try {
-    await logout()
-    if (import.meta.client) document.cookie = 'current_token_id=; path=/; max-age=0'
-    navigateTo({ name: 'login' })
-  } finally {
-    loggingOut.value = false
-  }
-}
-
-const profileForm = ref({ name: '', username: '', email: '', phone: '' })
-const profileErrors = ref({})
+// ---- profile details ----
+const profileFields = reactive({ name: '', username: '', email: '', phone: '' })
+const profileForm = useFormErrors(['name', 'username', 'email', 'phone'])
 const profileLoading = ref(false)
-const profileSaved = ref(false)
 
-watchEffect(() => {
+const fillProfileForm = () => {
   const p = profile.value
   if (!p) return
-  profileForm.value = {
-    name: p.name ?? '',
-    username: p.username ?? '',
-    email: p.email ?? '',
-    phone: p.phone ?? '',
-  }
-})
-
-const buildProfileBody = () => {
-  const body = { name: profileForm.value.name }
-  const include = (kind, has) => {
-    if (!has) return false
-    if (isExtraRequired(kind)) return true
-    return !!profileForm.value[kind]
-  }
-  if (include('username', hasUsername.value)) body.username = profileForm.value.username
-  if (include('email', hasEmail.value)) body.email = profileForm.value.email
-  if (include('phone', hasPhone.value)) body.phone = profileForm.value.phone
-  return body
+  Object.assign(profileFields, { name: p.name ?? '', username: p.username ?? '', email: p.email ?? '', phone: p.phone ?? '' })
 }
+// Filled once, then only after a save — an identity refresh mid-edit must not wipe typing.
+fillProfileForm()
 
 const onUpdateProfile = async () => {
-  profileErrors.value = {}
-  profileSaved.value = false
+  profileForm.clear()
   profileLoading.value = true
   try {
-    await client('/api/update-profile', { method: 'PUT', body: buildProfileBody() })
+    const body = { name: profileFields.name }
+    const include = (kind, has) => has && (isExtraRequired(kind) || !!profileFields[kind])
+    if (include('username', hasUsername.value)) body.username = profileFields.username
+    if (include('email', hasEmail.value)) body.email = profileFields.email
+    if (include('phone', hasPhone.value)) body.phone = profileFields.phone
+    await client('/api/update-profile', { method: 'PUT', body })
     await refreshIdentity()
-    profileSaved.value = true
+    fillProfileForm()
+    toast({ title: t('saved', 'Changes saved.', 'تم حفظ التغييرات.'), variant: 'success' })
   } catch (error) {
-    profileErrors.value = error.data?.errors ?? {}
+    profileForm.set(error)
   } finally {
     profileLoading.value = false
   }
 }
 
-const passwordForm = ref({ old_password: '', password: '', password_confirmation: '' })
-const passwordErrors = ref({})
+// ---- password ----
+const passwordFields = reactive({ old_password: '', password: '', password_confirmation: '' })
+const passwordForm = useFormErrors(['old_password', 'password', 'password_confirmation'])
 const passwordLoading = ref(false)
-const passwordSaved = ref(false)
 
 const onChangePassword = async () => {
-  passwordErrors.value = {}
-  passwordSaved.value = false
+  passwordForm.clear()
+  if (passwordFields.password !== passwordFields.password_confirmation) {
+    passwordForm.errors.value = { password_confirmation: [t('password_mismatch', 'Passwords do not match.', 'كلمتا المرور غير متطابقتين.')] }
+    return
+  }
   passwordLoading.value = true
   try {
     const body = {
-      password: passwordForm.value.password,
-      password_confirmation: passwordForm.value.password_confirmation,
-      ...(hasPassword.value ? { old_password: passwordForm.value.old_password } : {}),
+      password: passwordFields.password,
+      password_confirmation: passwordFields.password_confirmation,
+      ...(hasPassword.value ? { old_password: passwordFields.old_password } : {}),
     }
     await client('/api/change-password', { method: 'POST', body })
-    passwordSaved.value = true
-    passwordForm.value = { old_password: '', password: '', password_confirmation: '' }
+    Object.assign(passwordFields, { old_password: '', password: '', password_confirmation: '' })
     await refreshIdentity()
+    toast({ title: t('password_updated', 'Password updated.', 'تم تحديث كلمة المرور.'), variant: 'success' })
   } catch (error) {
-    passwordErrors.value = error.data?.errors ?? {}
+    passwordForm.set(error)
   } finally {
     passwordLoading.value = false
   }
 }
 
-const identifierForm = ref({ new_identifier: '', otp: '' })
-const identifierErrors = ref({})
+// ---- identifier change ----
+const identifierKind = ref(identifiers.value[0] ?? 'email')
+watch(identifiers, (list) => {
+  if (list.length && !list.includes(identifierKind.value)) identifierKind.value = list[0]
+}, { immediate: true })
+const identifierKindLabel = computed(() => labelFor(identifierKind.value))
+
+const identifierFields = reactive({ new_identifier: '', otp: '' })
+const identifierForm = useFormErrors(['new_identifier', 'type', 'otp'])
 const identifierLoading = ref(false)
 const identifierVerifying = ref(false)
-const identifierSaved = ref(false)
 const otpSent = ref(false)
+const identifierCooldown = useCooldown(120)
 
 const onRequestIdentifierChange = async () => {
-  identifierErrors.value = {}
+  identifierForm.clear()
   identifierLoading.value = true
   try {
     await client('/api/request-identifier-change', {
       method: 'POST',
-      body: { new_identifier: identifierForm.value.new_identifier }
+      // The picker declares the kind; the API validates against it instead of guessing,
+      // so a phone must carry its country code.
+      body: { new_identifier: identifierFields.new_identifier, type: identifierKind.value },
     })
     otpSent.value = true
+    identifierCooldown.start()
   } catch (error) {
-    identifierErrors.value = error.data?.errors ?? {}
+    identifierForm.set(error)
   } finally {
     identifierLoading.value = false
   }
 }
 
 const onVerifyIdentifierChange = async () => {
-  identifierErrors.value = {}
-  identifierSaved.value = false
+  identifierForm.clear()
   identifierVerifying.value = true
   try {
     await client('/api/verify-identifier-change', {
       method: 'POST',
-      body: identifierForm.value
+      body: { ...identifierFields, type: identifierKind.value },
     })
     await refreshIdentity()
-    identifierSaved.value = true
-    otpSent.value = false
-    identifierForm.value = { new_identifier: '', otp: '' }
+    fillProfileForm()
+    toast({ title: t('kind_updated', ':kind updated.', 'تم تحديث :kind.', { kind: identifierKindLabel.value }), variant: 'success' })
+    cancelIdentifierChange()
   } catch (error) {
-    identifierErrors.value = error.data?.errors ?? {}
+    identifierForm.set(error)
   } finally {
     identifierVerifying.value = false
   }
 }
 
-const socialErrors = ref({})
+const cancelIdentifierChange = () => {
+  otpSent.value = false
+  Object.assign(identifierFields, { new_identifier: '', otp: '' })
+}
+
+// ---- social ----
+const socialError = ref('')
 const connecting = ref(null)
 const unlinking = ref(null)
 
-const {
-  data: socialData,
-  pending: socialLoading,
-  refresh: loadSocialAccounts,
-} = useApiFetch('/api/social-accounts', {
+const { data: socialData, pending: socialLoading, refresh: loadSocialAccounts } = useApiFetch('/api/social-accounts', {
   key: 'social-accounts',
+  immediate: socialAuthAvailable.value,
+  default: () => null,
 })
-
-// Tolerate both shapes: data is array OR { social_accounts: [...] }
-const socialAccounts = computed(() => {
-  const d = socialData.value?.data ?? socialData.value
-  if (Array.isArray(d)) return d
-  return d?.social_accounts ?? []
-})
-
+const socialAccounts = computed(() => socialData.value?.data?.social_accounts ?? [])
 const linkedProviders = computed(() => socialAccounts.value.map((a) => a.provider))
 const findLinked = (p) => socialAccounts.value.find((a) => a.provider === p)
-const hasPassword = computed(() => !!profile.value?.has_password)
-
 const canLinkMore = computed(() => {
-  if (!maxSocialAccounts.value) return true
-  return socialAccounts.value.length < maxSocialAccounts.value
+  const remote = socialData.value?.data?.can_link_more
+  if (typeof remote === 'boolean') return remote
+  return !maxSocialAccounts.value || socialAccounts.value.length < maxSocialAccounts.value
 })
 
-const socialErrorMap = computed(() => ({
-  invalid_firebase_token: t('err_invalid_firebase_token', 'Invalid sign-in token.', 'رمز الدخول غير صالح.'),
-  social_provider_not_allowed: t('err_social_provider_not_allowed', 'This provider is not allowed.', 'هذا المزوّد غير مسموح.'),
-  social_email_mismatch: t('err_social_email_mismatch', 'Provider email does not match your account.', 'بريد المزوّد لا يطابق حسابك.'),
-  social_account_already_linked: t('err_social_account_already_linked', 'This account is already linked to another user.', 'هذا الحساب مربوط بمستخدم آخر.'),
-  social_provider_already_linked: t('err_social_provider_already_linked', 'Provider already linked.', 'هذا المزوّد مربوط بالفعل.'),
-  social_max_accounts_reached: t('err_social_max_accounts_reached', 'Maximum linked accounts reached.', 'تم بلوغ الحد الأقصى للحسابات المربوطة.'),
-  social_auth_requires_email: t('err_social_auth_requires_email', 'Social login requires an email-based account.', 'يتطلب تسجيل الدخول الاجتماعي حسابًا بريدًا.'),
-  social_provider_not_linked: t('err_social_provider_not_linked', 'Provider is not currently linked.', 'هذا المزوّد غير مربوط حاليًا.'),
-  cannot_unlink_last_social_account: t('err_cannot_unlink_last_social_account', 'Set a password before unlinking your last social provider.', 'عيّن كلمة مرور قبل فك ربط آخر مزوّد.'),
-}))
-
-const socialErrorText = (key) => {
-  const raw = socialErrors.value?.[key]?.[0]
-  if (!raw) return ''
-  return socialErrorMap.value[raw] ?? raw
-}
-
-const providerLabel = (p) => ({
-  'google.com': 'Google',
-  'apple.com': 'Apple',
-  'facebook.com': 'Facebook',
-  'twitter.com': 'Twitter',
-  'github.com': 'GitHub',
-  'microsoft.com': 'Microsoft',
-  'yahoo.com': 'Yahoo',
-}[p] ?? p)
-
 const onConnectProvider = async (p) => {
-  socialErrors.value = {}
+  socialError.value = ''
   connecting.value = p
   try {
     const { idToken } = await signInWithProvider(p)
-    await client('/api/link-social-account', {
-      method: 'POST',
-      body: { token: idToken },
-    })
+    await client('/api/link-social-account', { method: 'POST', body: { token: idToken } })
     await loadSocialAccounts()
     await refreshIdentity()
   } catch (error) {
-    socialErrors.value = error?.data?.errors ?? { token: [error?.message ?? String(error)] }
+    socialError.value = socialErrorMessage(error, t)
   } finally {
     connecting.value = null
   }
 }
 
 const onUnlinkSocial = async (provider) => {
-  socialErrors.value = {}
+  socialError.value = ''
   unlinking.value = provider
   try {
-    await client('/api/unlink-social-account', {
-      method: 'DELETE',
-      body: { provider }
-    })
+    await client('/api/unlink-social-account', { method: 'DELETE', body: { provider } })
     await loadSocialAccounts()
     await refreshIdentity()
   } catch (error) {
-    socialErrors.value = error.data?.errors ?? {}
+    socialError.value = socialErrorMessage(error, t)
   } finally {
     unlinking.value = null
   }
 }
 
-onMounted(() => {
-  if (socialAuthAvailable.value) loadSocialAccounts()
-})
-
+// ---- delete ----
 const deleting = ref(false)
 const deleteDialogOpen = ref(false)
+const deleteError = ref('')
 const confirmDeleteAccount = async () => {
   deleting.value = true
+  deleteError.value = ''
   try {
     await client('/api/delete-account', { method: 'DELETE' })
-    await logout().catch(() => { })
-    if (import.meta.client) document.cookie = 'current_token_id=; path=/; max-age=0'
-    navigateTo({ name: 'login' })
-  } catch {
-    deleting.value = false
-  } finally {
+    await signOut()
     deleteDialogOpen.value = false
+    toast({ title: t('account_deleted', 'Your account has been scheduled for deletion.', 'تمت جدولة حسابك للحذف.') })
+    await navigateTo({ name: 'login' })
+  } catch (error) {
+    deleteError.value = error?.data?.message ?? t('error_generic', 'Something went wrong. Please try again.', 'حدث خطأ ما. حاول مجددًا.')
+  } finally {
+    deleting.value = false
   }
 }
 </script>

@@ -2,7 +2,8 @@
  * App settings link blocks from `GET /api/app-settings` (public, localized via
  * Accept-Language). SSR-friendly + deduped. Refetches when the language changes.
  *
- * Item shape: { id, text, url, image } (image is a full URL or null).
+ * Item shape: { id, text, url, image } where image is the backend Image object
+ * ({ id, url, type, blurhash, image_api }) or null — render it with <AppImage>.
  */
 export const useAppSettings = () => {
   const lang = useCookie('lang')

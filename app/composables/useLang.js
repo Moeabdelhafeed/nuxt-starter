@@ -11,7 +11,7 @@ export const useLang = (group = 'web', subGroup = 'general') => {
     }
   })()
 
-  const { data: langsData, refresh: refreshLanguages } = useSanctumFetch('/api/languages', {
+  const { data: langsData, refresh: refreshLanguages } = useApiFetch('/api/languages', {
     key: 'languages'
   })
   const languages = computed(() => langsData.value?.data ?? [])
@@ -43,7 +43,7 @@ export const useLang = (group = 'web', subGroup = 'general') => {
     data: transData,
     refresh: refreshTranslations,
     pending: translationsPending,
-  } = useSanctumFetch('/api/translations', {
+  } = useApiFetch('/api/translations', {
     key: `translations-${group}`,
     query: { group },
     watch: [code],
@@ -57,7 +57,7 @@ export const useLang = (group = 'web', subGroup = 'general') => {
   // Default slice for this composable's sub_group (a per-call override can pick another).
   const translations = computed(() => groupTranslations.value?.[subGroup] ?? {})
 
-  const client = useSanctumClient()
+  const client = useApi()
 
   const seedTranslation = async (key, defaults, seedSubGroup = subGroup) => {
     // Scope the guard by group + sub_group so the same key can seed independently per sub-group.

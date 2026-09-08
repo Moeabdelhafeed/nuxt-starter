@@ -1,34 +1,24 @@
 <template>
-  <div class="fixed end-4 bottom-4 z-50 flex justify-center">
-    <div class="flex items-center gap-2 rounded-full border bg-background px-3 py-1.5 shadow-sm">
-      <img
+  <Select v-if="languages.length > 1" :model-value="lang?.code ?? ''" @update:model-value="setLanguage">
+    <SelectTrigger size="sm" class="gap-2" :aria-label="t('language', 'Language', 'اللغة')">
+      <AppImage
         v-if="lang?.image?.image_api"
-        :src="lang.image.image_api"
-        :alt="lang.code"
-        class="h-5 w-5 rounded-sm object-cover"
+        :src="lang.image"
+        alt=""
+        class="size-4 rounded-sm object-cover"
       />
-      <Select :model-value="lang?.code ?? ''" @update:model-value="setLanguage">
-        <SelectTrigger
-          class="h-8 min-w-32 border-0 bg-transparent shadow-none focus-visible:ring-0"
-        >
-          <SelectValue :placeholder="t('language', 'Language', 'اللغة')" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem v-for="l in languages" :key="l.code" :value="l.code">
-            <span class="flex items-center gap-2">
-              <img
-                v-if="l.image?.image_api"
-                :src="l.image.image_api"
-                :alt="l.code"
-                class="h-4 w-4 rounded-sm object-cover"
-              />
-              <span>{{ l.native_name ?? l.name }}</span>
-            </span>
-          </SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-  </div>
+      <LucideLanguages v-else class="size-4 text-muted-foreground" />
+      <SelectValue :placeholder="t('language', 'Language', 'اللغة')" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem v-for="l in languages" :key="l.code" :value="l.code">
+        <span class="flex items-center gap-2">
+          <AppImage v-if="l.image?.image_api" :src="l.image" alt="" class="size-4 rounded-sm object-cover" />
+          <span>{{ l.native_name ?? l.name }}</span>
+        </span>
+      </SelectItem>
+    </SelectContent>
+  </Select>
 </template>
 
 <script setup>

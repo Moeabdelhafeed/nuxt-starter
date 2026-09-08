@@ -11,7 +11,6 @@
  * @returns {import('ofetch').$Fetch}
  */
 export const useApi = () => {
-  const { appUsers } = useAuthConfig()
-  if (appUsers.value) return useSanctumClient()
+  if (useState('config').value?.app_users !== false) return useSanctumClient()
   return useNuxtApp().$publicApi
 }

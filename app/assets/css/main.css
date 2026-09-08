@@ -24,6 +24,8 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -59,6 +61,8 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.52 0.15 150);
+  --warning: oklch(0.6 0.15 65);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
@@ -93,6 +97,8 @@
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.75 0.16 150);
+  --warning: oklch(0.8 0.15 80);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
@@ -118,4 +124,25 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+@layer components {
+  /* Placeholder blocks while a fetch is in flight. The sweep is a pseudo-element so it
+     composites on the GPU; RTL reverses it; reduced-motion drops it. */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--muted);
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--background) 60%, transparent), transparent);
+    animation: skeleton-shimmer 1.4s infinite;
+  }
+  [dir="rtl"] .skeleton::after { animation-name: skeleton-shimmer-rtl; }
+  @keyframes skeleton-shimmer { 100% { transform: translateX(100%); } }
+  @keyframes skeleton-shimmer-rtl { from { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+  @media (prefers-reduced-motion: reduce) { .skeleton::after { animation: none; } }
 }

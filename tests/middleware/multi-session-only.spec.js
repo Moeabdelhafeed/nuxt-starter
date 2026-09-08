@@ -9,7 +9,7 @@ const { navigateTo, cfgRef, refresh } = vi.hoisted(() => ({
 }))
 
 mockNuxtImport('navigateTo', () => navigateTo)
-mockNuxtImport('useAuthConfig', () => () => ({ cfg: cfgRef, refresh }))
+mockNuxtImport('useAuthFlags', () => () => ({ cfg: cfgRef, refresh }))
 
 const middleware = (await import('~/middleware/multi-session-only')).default
 

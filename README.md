@@ -1,75 +1,25 @@
-# Nuxt Minimal Starter
+# Starter (Nuxt 4)
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+Web frontend for the Laravel starter API (`../starter`). Plain JavaScript, Tailwind v4, shadcn-vue, `nuxt-auth-sanctum` (token mode) behind a Nitro proxy that keeps the API token server-side.
+
+Read [CLAUDE.md](CLAUDE.md) for the architecture and conventions — it is the project's living documentation.
 
 ## Setup
 
-Make sure to install dependencies:
-
 ```bash
-# npm
+cp .env.example .env   # fill NUXT_API_BASE_URL and NUXT_X_API_TOKEN from the Laravel .env (APP_X_API_TOKEN)
 npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
+npm run dev            # http://localhost:3000
 ```
 
-## Development Server
+The Laravel API must be running (`php artisan serve` in `../starter`) with `FRONTEND_URL` pointing at this app's origin. Feature flags on the API (`HAS_TRANSLATIONS`, `HAS_PAGES`, `HAS_DYNAMIC_STORAGE`, `APP_USERS`, `APP_GUESTS`, `AUTH_MODE`) shape what the frontend renders; nothing here needs to change when they do.
 
-Start the development server on `http://localhost:3000`:
+## Checks
 
 ```bash
-# npm
-npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
+npm test               # vitest: middleware, composables, components
+npm run build          # production build (.output/)
+node .output/server/index.mjs
 ```
 
-## Production
-
-Build the application for production:
-
-```bash
-# npm
-npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
-```
-
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+Production: set `NUXT_PUBLIC_SITE_URL`, `NUXT_PUBLIC_SITE_NAME`, and `NUXT_TRUST_PROXY=true` only behind a reverse proxy that appends the real client IP to `X-Forwarded-For`.

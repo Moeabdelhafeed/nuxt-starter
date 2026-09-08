@@ -1,5 +1,10 @@
 const uploadingKeys = new Set()
-// Persists across renders so a missing key is only seeded once per (group:subGroup:key).
+/**
+ * One seed per key per page, so a render cannot fire the same upload twice. Deliberately
+ * *not* persisted: a key deleted from the CMS has to seed itself again on the next visit,
+ * with no storage to clear and no hard refresh. Duplicate uploads across loads are
+ * prevented by the media list being uncached — see CACHED_PATHS in server/api/[...].js.
+ */
 const seededMedia = new Set()
 
 /**
@@ -9,8 +14,17 @@ const seededMedia = new Set()
  * real storage — there is no local mode).
  *
  * Response shape from GET /api/media:
- *   data: { group, media: { [subGroup]: { [key]: { type, url, blurhash?, name?, size? } } } }
+ *   data: { group, media: { [subGroup]: { [key]: { type, image|video|file: {…} } } } }
+ * `type` is 'image' | 'video' | 'file' and the morph under that key is the canonical model
+ * shape (Image: { id, url, type, blurhash, image_api }; Video: the same plus video_api and
+ * a `thumbnail` Image). Render any of them with <AppMedia :src="asset" />.
  */
+// The morph lives under the item's own type key — see MediaItem::toApi().
+const assetUrl = (asset) => {
+  const morph = asset?.[asset?.type]
+  return morph?.image_api ?? morph?.video_api ?? morph?.file_api ?? null
+}
+
 export const useMedia = (group = 'web', subGroup = 'general') => {
   const {
     data: mediaData,
@@ -26,7 +40,7 @@ export const useMedia = (group = 'web', subGroup = 'general') => {
   // The fetch has resolved (so a missing key is genuinely absent, not still loading).
   const ready = computed(() => mediaData.value !== null && mediaData.value !== undefined)
 
-  // Full asset object { type, url, blurhash?, name?, size? } for a key.
+  // Full asset object { type, image|video|file } for a key.
   const mediaMeta = (key, { subGroup: sub } = {}) => {
     const slice = groupMedia.value?.[sub ?? subGroup] ?? {}
     return slice[key] ?? null
@@ -54,36 +68,44 @@ export const useMedia = (group = 'web', subGroup = 'general') => {
   }
 
   /**
-   * Resolve a key's URL. If the backend has it, returns the stored URL. Otherwise, when a
-   * `defaultPath` (a file in Nuxt's /public folder) is given, returns that path for immediate
-   * render AND — once, client-side — uploads it to the backend so the key is registered
-   * (exactly like `useLang().t(key, default)` seeds a missing translation).
+   * Resolve a key's asset — `{ type, image|video|file }`, ready for `<AppMedia :src="…" />`.
+   * If the backend has no such key and a `defaultPath` (a file in
+   * Nuxt's /public folder) is given, returns that path as a plain string for immediate
+   * render AND — once, client-side — uploads it so the key is registered (exactly like
+   * `useLang().t(key, default)` seeds a missing translation).
    *
    * Signatures:
-   *   media(key)
-   *   media(key, defaultPath)
-   *   media(key, defaultPath, { subGroup })
-   *   media(key, { subGroup })            // no default, just an override
+   *   mediaAsset(key)
+   *   mediaAsset(key, defaultPath)
+   *   mediaAsset(key, defaultPath, { subGroup })
+   *   mediaAsset(key, { subGroup })            // no default, just an override
    *
    * @param {string} key
    * @param {string|{subGroup?:string}} [defaultPath]
    * @param {{ subGroup?: string }} [opts]
-   * @returns {string|null}
+   * @returns {{type:string,url:string,blurhash?:string}|string|null}
    */
-  const media = (key, defaultPath, opts = {}) => {
+  const mediaAsset = (key, defaultPath, opts = {}) => {
     if (defaultPath && typeof defaultPath === 'object') {
       opts = defaultPath
       defaultPath = undefined
     }
     const effectiveSubGroup = opts.subGroup ?? subGroup
-    const url = (groupMedia.value?.[effectiveSubGroup] ?? {})[key]?.url
+    const asset = (groupMedia.value?.[effectiveSubGroup] ?? {})[key]
 
-    if (url) return url
+    if (assetUrl(asset)) return asset
 
     if (defaultPath && ready.value && import.meta.client) {
       seedMedia(key, defaultPath, effectiveSubGroup)
     }
     return defaultPath ?? null
+  }
+
+  /** Same as `mediaAsset`, narrowed to the public URL. Use it for `background-image`,
+   *  `<link>`, og:image — anywhere an object is no use. @returns {string|null} */
+  const media = (key, defaultPath, opts = {}) => {
+    const asset = mediaAsset(key, defaultPath, opts)
+    return typeof asset === 'string' ? asset : assetUrl(asset)
   }
 
   /**
@@ -120,6 +142,7 @@ export const useMedia = (group = 'web', subGroup = 'general') => {
 
   return {
     media,
+    mediaAsset,
     mediaMeta,
     groupMedia,
     uploadMedia,

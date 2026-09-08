@@ -1,5 +1,5 @@
 export default defineNuxtRouteMiddleware(async () => {
-  const { cfg, refresh } = useAuthConfig()
+  const { cfg, refresh } = useAuthFlags()
   if (!cfg.value || !Object.keys(cfg.value).length) {
     await refresh()
   }

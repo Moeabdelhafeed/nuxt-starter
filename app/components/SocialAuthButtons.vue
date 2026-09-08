@@ -1,5 +1,5 @@
 <template>
-  <div v-if="providers.length" class="flex flex-col gap-2">
+  <div v-if="providers.length" class="grid gap-2">
     <Button
       v-for="p in providers"
       :key="p"
@@ -9,16 +9,17 @@
       class="w-full justify-center gap-2"
       @click="onClick(p)"
     >
-      <span :style="{ backgroundColor: providerColor(p) }" class="h-3 w-3 rounded-full" />
+      <LucideLoaderCircle v-if="pending === p" class="size-4 animate-spin" />
+      <span v-else :style="{ backgroundColor: providerColor(p) }" class="size-3 rounded-full" aria-hidden="true" />
       {{ pending === p
         ? t('please_wait', 'Please wait...', 'يرجى الانتظار...')
-        : t(`continue_with_${p.replace('.', '_')}`, `Continue with ${labelFor(p)}`, `المتابعة عبر ${arLabelFor(p)}`) }}
+        : t(`continue_with_${p.replace('.', '_')}`, `Continue with ${providerLabel(p, 'en')}`, `المتابعة عبر ${providerLabel(p, 'ar')}`) }}
     </Button>
   </div>
 </template>
 
 <script setup>
-const props = defineProps({
+defineProps({
   providers: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
 })
@@ -27,26 +28,6 @@ const emit = defineEmits(['select'])
 const { t } = useLang('web', 'auth')
 const { signInWithProvider } = useFirebaseAuth()
 const pending = ref(null)
-
-const labelFor = (p) => ({
-  'google.com': 'Google',
-  'apple.com': 'Apple',
-  'facebook.com': 'Facebook',
-  'twitter.com': 'Twitter',
-  'github.com': 'GitHub',
-  'microsoft.com': 'Microsoft',
-  'yahoo.com': 'Yahoo',
-}[p] ?? p)
-
-const arLabelFor = (p) => ({
-  'google.com': 'جوجل',
-  'apple.com': 'آبل',
-  'facebook.com': 'فيسبوك',
-  'twitter.com': 'تويتر',
-  'github.com': 'جيت هاب',
-  'microsoft.com': 'مايكروسوفت',
-  'yahoo.com': 'ياهو',
-}[p] ?? p)
 
 const providerColor = (p) => ({
   'google.com': '#4285F4',

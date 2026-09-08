@@ -19,7 +19,7 @@ const escapeForI18n = (str) => {
 }
 
 export default defineEventHandler(async (event) => {
-  if (process.env.NODE_ENV === 'production') {
+  if (!import.meta.dev) {
     throw createError({ statusCode: 403, statusMessage: 'Dev only' })
   }
   const body = await readBody(event)
@@ -33,7 +33,10 @@ export default defineEventHandler(async (event) => {
   const errors = []
 
   await Promise.all(Object.entries(defaults).map(async ([locale, value]) => {
-    if (value === undefined || value === null) return
+    // The locale names a file on disk: only a language tag may do that, and only a
+    // string may go into it — this endpoint is reachable from any page open in the
+    // developer's browser.
+    if (!/^[a-z]{2,3}(-[a-z]{2,4})?$/i.test(locale) || typeof value !== 'string') return
     const file = resolve(localesDir, `${locale}.json`)
     await withLock(file, async () => {
       let json = {}

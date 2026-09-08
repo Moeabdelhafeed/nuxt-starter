@@ -11,15 +11,19 @@ Project conventions and architecture notes for this Nuxt 4 starter. Loaded autom
 - **reka-ui** (vue port of radix) underlies shadcn. `<ConfigProvider :dir>` in [app/app.vue](app/app.vue) propagates RTL/LTR to all reka components.
 - **@nuxtjs/i18n** for local-file translations (en.json / ar.json). Used only in `local` translation mode.
 - **nuxt-auth-sanctum** for Laravel Sanctum auth. Token mode. Composables: `useSanctumAuth`, `useSanctumClient`, `useSanctumFetch`.
-- **@nuxtjs/seo**, `motion-v`, `nuxt-lucide-icons`, `v-gsap-nuxt`, `@vueuse/nuxt` available.
+- **@nuxtjs/seo** (site name/url from `NUXT_PUBLIC_SITE_*`, robots disallow on auth/account pages), `nuxt-lucide-icons` (`<LucideX />` etc.), `@vueuse/nuxt`, `nuxt-laravel-echo` (Pusher, private `user.{id}` channel).
 
 ## Backend contract
 
-Laravel API at `runtimeConfig.public.baseUrl` (default `http://localhost:8000`). Every request gets:
-- `X-API-TOKEN: <runtimeConfig.public.xApiToken>` (from `.env` `NUXT_PUBLIC_X_API_TOKEN`).
-- `Accept-Language: <locale code>` (sourced based on translations mode — see below).
+Laravel API at `runtimeConfig.apiBaseUrl` (private, `NUXT_API_BASE_URL`). The browser never talks to Laravel: every `/api/*` call hits the Nitro catch-all proxy in [server/api/[...].js](server/api/[...].js), which injects the private `X-API-TOKEN`, pins `Host`/`X-Forwarded-Host` to Laravel (otherwise `image_api` URLs come back pointing at Nuxt), forces `Accept: application/json` (otherwise a 401 is a 302 to Laravel's HTML login), strips cookies, forwards a client IP the caller cannot choose, and refuses paths that escape `/api/` via dot-segments.
+
+Every request also carries `X-Device-Id`, `X-Platform`, `X-FCM-Token` (mobile only) and `Accept-Language`, built in one place — [useApiHeaders()](app/composables/useApiHeaders.js) — and applied by every transport (`$publicApi`, the Sanctum `sanctum:request` hook, `useApiFetch`, the Echo interceptor). Laravel 422s any request missing the device headers, so `useDevice()` mints the device id during SSR too and writes it back onto the request so every read in that render agrees.
 
 **Method override (mandatory):** the production host blocks real `PUT`/`PATCH`/`DELETE`. Both transports rewrite those to **`POST` + an `X-HTTP-Method-Override` header** carrying the real verb — the Sanctum client via the `sanctum:request` hook in [app/plugins/02.method-override.js](app/plugins/02.method-override.js), and `$publicApi` in its own `onRequest` ([app/plugins/01.public-api.js](app/plugins/01.public-api.js)). So you still write `useApi()('/api/...', { method: 'PUT' })` as normal — it goes out as POST automatically. Don't hand-roll a bare `$fetch` for a mutating call; route it through `useApi` / `useSanctumClient` / `useSanctumFetch` so the override applies.
+
+**Error shapes.** Validation and app errors come in the envelope `{ success:false, message, errors:{ field:[msg] }, data:null }`; framework 401/403/404/429 are bare `{ message }`. Forms never read `err.data.errors` directly — [useFormErrors(fields)](app/composables/useFormErrors.js) splits a failure into inline field errors (rendered by `<FormField>`) and one `message` (rendered by `<FormAlert>`); errors keyed by a field the form does not render (e.g. `device_id`) are folded into the message. App-wide failures — a 401 while signed in (session expired → local sign-out → `/login`), 429, 5xx, network — are toasted once by [app/plugins/04.api-errors.client.js](app/plugins/04.api-errors.client.js) via `useToast()`; the page still gets the error.
+
+**Guests have no token.** `POST /api/guest` binds a guest row to `X-Device-Id`; `GET /api/user` then resolves it with no Bearer, which is why the bootstrap plugin probes `/api/user` even with no token. Use [useAuthSession()](app/composables/useAuthSession.js) for everything the Sanctum module does not own: `isGuest` / `isMember` / `isVerified`, `tokenId` (the `current_token_id` cookie the device-revoke listener compares against), `applyLogin(res)` for login-shaped responses that bypass `login()` (OTP verify, social), and `signOut()` which always leaves the browser clean even when the API call fails.
 
 Auth endpoints (Sanctum module config in [nuxt.config.ts](nuxt.config.ts)):
 - `POST /api/login`, `POST /api/logout`, `GET /api/user` for session.
@@ -33,22 +37,40 @@ Config endpoints:
   - `allowed_email_domains` — the string `"all"` (unrestricted) **or** an array like `["gmail.com","yahoo.com"]`. When an array, pre-validate the email domain client-side before submit and surface an inline error for others.
   - `allowed_phone_countries` — the string `"all"` **or** an array of ISO country codes like `["JO","SA","US"]`. When an array, restrict the phone country-code picker to those.
 - `GET /api/languages` — returns array of `{ id, code, name, native_name, direction, is_default, image: { image_api } }`.
-- `GET /api/translations?group=web` — returns `{ key: "value with :placeholders" }` flat map for current `Accept-Language` header.
-- `POST /api/translations` — body `{ translations: { key: value }, group }`. Used in remote mode to seed missing keys.
+- `GET /api/translations?group=web` — returns `{ group, locale, translations: { [sub_group]: { key: "value with :placeholders" } } }` for the current `Accept-Language`. Nested by sub-group; `useLang(group, subGroup)` slices its own.
+- `POST /api/translations` — body `{ translations: { key: value }, group, sub_group }`. Used in remote mode to seed missing keys. **Gated by the backend's `testing-only` middleware** (403 unless `IS_TESTING=true`), as are `DELETE /api/translations` and `POST/DELETE /api/media`.
 - `GET /api/app-settings` — public (no Bearer), gated by backend `HAS_APP_SETTINGS`. Returns the app's link blocks, localized via `Accept-Language`. `data` always has all five keys (empty arrays when unset), each item ordered by `sort_order`, active only:
   ```json
-  { "social": [{ "id": 1, "text": "Twitter", "url": "https://…", "image": "https://…|null" }],
+  { "social": [{ "id": 1, "text": "Twitter", "url": "https://…", "image": { "id": 7, "url": "app-settings/x.webp", "type": "webp", "blurhash": "L…", "image_api": "https://…" } }],
     "contact": [], "app_store": [], "google_play": [], "app_gallery": [] }
   ```
-  Use for footer/social icons, contact links, and store badges. `image` is a full URL or `null`; `text` is the current-locale label. Consume via `useAppSettings()` (see below).
-- `GET /api/pages` / `GET /api/pages/{slug}` — public, gated by backend `HAS_PAGES`. Active CMS pages localized via `Accept-Language`. Page shape `{ id, slug, name, content, image }` (`content` is markdown/HTML). Consume via `usePages()` / `usePage(slug)`.
+  Use for footer/social icons, contact links, and store badges. `image` is the backend Image object or `null` — render it with `<AppImage>`, never bind `image` itself; `text` is the current-locale label. Consume via `useAppSettings()` (see below).
+- `GET /api/pages` / `GET /api/pages/{slug}` — public, gated by backend `HAS_PAGES`. Active CMS pages localized via `Accept-Language`. Page shape `{ id, slug, name, content, image }` (`content` is HTML, sanitised on save by the admin). Consume via `usePages()` / `await usePage(slug)` — the slug page awaits it and throws a real 404 when the CMS has no such page.
+- Feature flags off on the backend (`HAS_TRANSLATIONS`, `HAS_PAGES`, `HAS_DYNAMIC_STORAGE`) make their endpoints 404. The app degrades: `t()` falls back to inline defaults, the language switcher hides, the footer/home nav simply have no pages, `mediaAsset()` returns the `/public` fallback.
 
 ### Content composables
 
 Public, SSR-friendly, deduped, and locale-reactive (refetch when `lang` / `i18n_locale` cookie changes). All route through `useApiFetch` and unwrap the `{ data }` envelope:
-- `useAppSettings()` → `{ blocks, social, contact, appStore, googlePlay, appGallery, pending, error, refresh }`. Each block is an array of `{ id, text, url, image }`.
+### Backend media objects
+
+Every asset the backend serializes goes through its own model, so the shape is the same everywhere:
+
+- **Image** — `{ id, url, type, blurhash, image_api }`. `image_api` is the public URL; `url` is the stored path, so never bind `:src` to it.
+- **Video** — `{ id, url, type, video_api, thumbnail }`, where `thumbnail` is an Image object (or `null`).
+- **File** — `{ id, url, type, name, size, file_api }`.
+
+A field that holds one asset carries the object directly (`image` on app-settings items, pages, languages). A record that can be any of the three carries `{ type, image|video|file }` — `/api/media` items and gallery items — nested rather than flattened, since the morph has its own `id`/`type`.
+
+Render them, never hand-roll an `<img>`:
+- `<AppImage :src="imageObject" />` ([app/components/AppImage.vue](app/components/AppImage.vue)) — paints the blurhash behind the `<img>` until the file loads (average colour during SSR, decoded 32×32 canvas after hydration). Accepts a plain URL string too.
+- `<AppMedia :src="asset" />` ([app/components/AppMedia.vue](app/components/AppMedia.vue)) — for a `{ type, … }` wrapper: image → `<AppImage>`, video → `<video>` postered with `thumbnail.image_api` and backed by its blurhash until playback starts, file → a link labelled with `name`.
+- The placeholder itself is [useBlurhash()](app/composables/useBlurhash.js).
+
+`useMedia()` exposes `mediaAsset(key, defaultPath?)` (the `{ type, … }` wrapper, or the `/public` fallback path as a string, seeding it to the backend as before) and `media()`, the same call narrowed to the public URL for `background-image` / og:image / anywhere an object is no use.
+
+- `useAppSettings()` → `{ blocks, social, contact, appStore, googlePlay, appGallery, pending, error, refresh }`. Each block is an array of `{ id, text, url, image }` (`image` is an Image object or `null`).
 - `usePages()` → `{ pages, bySlug(slug), pending, error, refresh }`.
-- `usePage(slug)` → `{ page, pending, error, refresh }` (`slug` may be a ref).
+- `usePage(slug)` → awaitable `{ page, pending, error, refresh }` (`slug` may be a ref/getter).
 
 Response envelope: `{ success, message, errors, data }`. Pages typically read `res?.data ?? res ?? {}` to be tolerant.
 
@@ -68,6 +90,18 @@ Branching:
 - otherwise → normal active.
 - Pre-submit uniqueness for register/profile: treat any `exists:true` as "taken" regardless of `pending_deletion`/`suspended`.
 
+### Identifier requests always declare a `type`
+
+Every endpoint that takes an `identifier` / `new_identifier` also takes a **required `type`** (`email`, `phone`, or — login/check only — `username`). The API never infers the kind from the value's shape; a phone must therefore arrive **with its country code** and is stored in E.164 (`+966501234567`). Sending `0501234567` or `770000000` is a 422, not a guess.
+
+Affected: `POST /api/login`, `/api/register`, `/api/check-identifier`, `/api/forgot-password`, `/api/verify-forgot-password-otp`, `/api/change-forgot-password`, `/api/verify-login`, `/api/request-identifier-change`, `/api/verify-identifier-change`.
+
+On `POST /api/forgot-password` the two questions are separate fields:
+- `type` — what the user typed to identify themselves (required).
+- `channel` — where the reset code should be sent (`email` / `phone`, optional, defaults to email > phone). This is what the old `type` on that endpoint used to mean.
+
+`useAuthConfig()` exposes `identifierTypes` (the kinds this project accepts) and `defaultIdentifierType`. Pages keep the selected kind in state — a picker when there is more than one, otherwise the single configured identifier — and send it with every request. Carry it through multi-step flows in the query string (`/verify-login?identifier=…&type=phone`) so each step declares the same thing.
+
 ## Translations system (`useLang`)
 
 Single source of truth for locale + dir + translation lookup, in [app/composables/useLang.js](app/composables/useLang.js).
@@ -86,6 +120,16 @@ Selected via `runtimeConfig.public.translationsMode` (override with `NUXT_PUBLIC
 [app/plugins/01.sanctum-listener.js](app/plugins/01.sanctum-listener.js) reads `translationsMode` to decide which cookie's code to put in `Accept-Language`:
 - `local` → `i18n_locale` cookie (string), fallback `lang.code`, then `'en'`.
 - `remote` → `lang.code`, fallback `'en'`.
+
+### First render picks the language before anything else is fetched
+
+[app/plugins/00.bootstrap-config.js](app/plugins/00.bootstrap-config.js) resolves the language *before* `/api/config` and every page fetch, because a cold visit has no `lang` cookie: without it the API calls go out as `en` while the layout takes `dir`/`lang` from the backend default, so an Arabic-first project renders RTL with English copy.
+
+Order on a first visit: `GET /api/languages` (sent with `Accept-Language: en` — the API rejects a request without the header, and the list is the same either way) → pick the visitor's browser language when the project has it, else `is_default`, else the first → write the `lang` + `i18n_locale` cookies → everything else uses that code.
+
+Two subtleties worth keeping:
+- Nuxt's `useCookie` re-parses the **incoming request header** on every call, so a cookie written in the plugin is invisible to composables that read it later in the same SSR pass. The plugin writes the value back onto `event.node.req.headers.cookie` so the rest of the render sees it.
+- The response is primed into `nuxtApp.payload.data.languages`, so `useLang()`'s own `useApiFetch('/api/languages', { key: 'languages' })` reuses it instead of fetching the list twice per render.
 
 ### `t(key, defaults?, params?)`
 
@@ -145,13 +189,15 @@ For 3+ locales **always use map form** — positional only handles en/ar.
 - [app/layouts/default.vue](app/layouts/default.vue): sets `<Html :lang="code" :dir="dir">` from `useLang`. Nuxt-i18n's `useLocaleHead()` is **not** used (we replaced its output with our cookie-driven values).
 - [app/components/LanguageSwitcher.vue](app/components/LanguageSwitcher.vue): fixed bottom-end pill with `Select` (shadcn). Mounted once in default layout — appears on every page.
 
-## Modals
+## Layout, forms, feedback
 
-Pattern is custom (not shadcn `Dialog`). Inline `<Teleport to="body">` + overlay div + panel. Examples:
-- Login restore-account confirmation ([app/pages/login.vue](app/pages/login.vue)).
-- Profile delete-account confirmation ([app/pages/profile.vue](app/pages/profile.vue)).
-
-Reason: lightweight, no extra deps, easy to style.
+- Two layouts: `default` (header with brand/pages/auth actions/language switcher, `<main>`, footer, toaster, skip link) and `auth` (centred card + minimal top bar) — auth pages set `definePageMeta({ layout: 'auth' })`.
+- [app/error.vue](app/error.vue) is self-contained (no composables that fetch): it is what renders after something already failed.
+- Forms: `<FormField id label error hint optional>` wraps label + control + message and hands the slot a `field` object to spread on the input (`aria-invalid`, `aria-describedby`); `<FormAlert :message variant>` for non-field errors and success notes; `<AuthPasswordInput>`, `<AuthOtpInput>` (6 boxes, `@complete` for auto-submit), `<AuthPhoneInput :allowed>` (country picker + E.164 output — phones are never sent without a country code), `<IdentifierInput :kind>` picks the right control for the declared identifier kind, `<IdentifierKindPicker>` is the email/phone/username toggle group. Shared logic: `useIdentifierCheck(identifier, type)` (debounced check-identifier), `useCooldown(seconds)` + `<ResendCodeButton>`, `providerLabel(id, locale)` / `socialErrorMessage(err, t)` in `app/utils`.
+- Confirmations use `<ConfirmDialog v-model:open title description destructive loading @confirm>` on the installed shadcn `Dialog` (focus trap, Escape, aria come for free). Do not hand-roll `<Teleport>` overlays.
+- Feedback: `useToast().toast({ title, description, variant })` for outcomes that are not tied to a field (saved, signed out, session expired); `<AppSkeleton>` blocks while `pending`.
+- Every page sets `useHead({ title })`; the site name comes from `useSiteConfig()`; `[slug].vue` also sets description/og from the CMS page.
+- Colour tokens: `text-destructive` / `text-success` / `text-warning` (defined in `main.css`), never raw `text-red-500`. Physical spacing classes (`ml-`, `pr-`, `text-left`) are banned — use logical ones (`ms-`, `pe-`, `text-start`): Arabic is a first-class locale.
 
 ## Fetching conventions
 
@@ -165,6 +211,7 @@ Reason: lightweight, no extra deps, easy to style.
 - `sanctum:guest` — requires no session (login/register/forgot pages).
 - `verified` ([app/middleware/verified.js](app/middleware/verified.js)) — requires email verification.
 - `unverified` ([app/middleware/unverified.js](app/middleware/unverified.js)) — for `/verify` page.
+- `require-user` / `require-registered` / `require-pre-auth` / `auth-mode` / `password-mode-only` / `multi-session-only` — see the files; each is a few lines and unit-tested in `tests/middleware`.
 
 ### No-auth-system mode (both `app_users` and `app_guests` off)
 
@@ -178,11 +225,16 @@ When adding auth-gated pages/UI, gate on `appUsers`/`appGuests` (or `hasAuthSyst
 
 ## Env vars
 
-`.env` is gitignored. Required (or defaults exist in `runtimeConfig.public`):
-- `NUXT_PUBLIC_X_API_TOKEN` — Laravel API token.
-- `NUXT_PUBLIC_BASE_URL` — Laravel base URL (default `http://localhost:8000`).
+`.env` is gitignored; see `.env.example`:
+- `NUXT_API_BASE_URL` — Laravel base URL, private (proxy only).
+- `NUXT_X_API_TOKEN` — Laravel `APP_X_API_TOKEN`, private (injected by the proxy, never shipped).
+- `NUXT_TRUST_PROXY` — `true` only behind a reverse proxy that appends the real client IP to `X-Forwarded-For`.
+- `NUXT_PUBLIC_SITE_URL` / `NUXT_PUBLIC_SITE_NAME` — public origin and name (canonical/og, sitemap, `<title>` template). Read at **runtime** by nuxt-site-config, so set them on the server, not just at build; `i18n.baseUrl` is the one build-time consumer.
 - `NUXT_PUBLIC_TRANSLATIONS_MODE` — `local` or `remote` (default `remote`).
+- `NUXT_PUBLIC_PUSHER_APP_KEY` / `_CLUSTER`, `NUXT_PUBLIC_FIREBASE_*` — public client keys.
 - `NUXT_OG_IMAGE_SECRET` — for `@nuxtjs/seo` OG image generation.
+
+Never call `useLang()` (or anything that fetches) inside a function invoked from a template — create it in setup. `useAuthConfig()` builds on `useLang`, so `useApi`/`useApiFetch` read the `app_users` flag straight off `useState('config')` to avoid the cycle.
 
 ## Coding conventions
 
@@ -194,11 +246,45 @@ When adding auth-gated pages/UI, gate on `appUsers`/`appGuests` (or `hasAuthSyst
 - **No defensive nesting** for impossible cases.
 - **Tests/dev-feature checks** at boundaries; not deep inside helpers.
 
+## The proxy cache (read before touching `server/api/[...].js`)
+
+`fetchPublic` caches a handful of public GETs for 60s. Two rules keep it correct, both
+learned from a production bug that cost a day:
+
+- **The cache key must be a plain slug.** Nitro writes each entry as a file path, so a key
+  holding a URL — `?`, `&`, `=` — gets mangled and two locales of the same endpoint
+  collapse onto one entry. `/api/translations?group=web` is exactly that shape.
+- **The locale is an explicit argument**, not something read back out of the headers, so
+  what is fetched and what it is filed under cannot drift apart.
+
+Both failure modes are **production-only** — translations are not cached in dev — so they
+never appear locally. Test cache changes with `npm run build && node .output/server/index.mjs`,
+alternating `Accept-Language: ar` and `en` against the same URL.
+
+`Accept-Language` is normalised to a bare code before it leaves. Laravel matches the header
+literally: `en` is English, `en-US,en;q=0.9` — what browsers actually send — matches nothing
+and silently falls back to the default language.
+
+## Seeding, and why a key must not upload twice
+
+`mediaAsset(key, '/public/path')` uploads the fallback once and registers the key, exactly
+like a missing translation seeds itself. An in-memory `Set` guards repeats within a page;
+across loads the guard is that `/api/media` is deliberately **not** proxy-cached, so the
+list after a seed already knows the key. Cache it and the same file uploads on every load:
+duplicates, a URL that changes under the browser, and a just-written file that 403s for a
+moment (which reads as a broken image).
+
+Keys seed only from pages that use them, in a real browser, and only where the backend
+allows writes (`IS_TESTING=true` — the backend's `testing-only` middleware 403s otherwise).
+A production API provisions nothing.
+
 ## Common gotchas
 
 - **`@` in JSON values** trips vue-i18n's AOT parser (linked-message syntax `@:key`). Server endpoint already escapes when writing; manual edits to `i18n/locales/*.json` need `m{'@'}example.com` form for literal `@`.
 - **Stale auto-import hints** ("Could not find name `useFoo`") in IDE after creating a new composable → run `npx nuxt prepare` or wait for next dev start. Runtime works.
 - **`useState` with `Set`/`Map`** dies on hydration (JSON serializes as `{}`). Use module-level scope for these.
-- **Sanctum plugin only sets `Accept-Language` when caller didn't supply one** — lets seed POSTs force a specific locale.
+- **`useApiHeaders().apply()` only sets `Accept-Language` when the caller didn't** — lets seed POSTs force a specific locale.
+- **Icons**: lucide names are the current ones (`LucideLoaderCircle`, not `Loader2`); check `node_modules/lucide-vue-next/dist/esm/icons`.
+- **Sanctum `login()` throws if any identity is set** — a guest counts. Pages null the guest user before calling `login()`.
 - **`max_accounts: 0`** means unlimited; check `!canLinkMore && maxAccounts > 0` before showing limit notice.
 - **Cookie `lang` stores object**, `i18n_locale` stores string code. Don't mix them.

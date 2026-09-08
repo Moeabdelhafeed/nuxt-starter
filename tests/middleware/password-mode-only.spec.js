@@ -8,7 +8,7 @@ const { navigateTo, cfgRef } = vi.hoisted(() => ({
 }))
 
 mockNuxtImport('navigateTo', () => navigateTo)
-mockNuxtImport('useAuthConfig', () => () => ({ cfg: cfgRef }))
+mockNuxtImport('useAuthFlags', () => () => ({ cfg: cfgRef }))
 
 const middleware = (await import('~/middleware/password-mode-only')).default
 

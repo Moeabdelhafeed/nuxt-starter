@@ -1,18 +1,29 @@
 import tailwindcss from "@tailwindcss/vite"
 
+// ── Per-project settings ─────────────────────────────────────────────────────
+// Fill these in when starting a project. They resolve at build time, so a deploy
+// variable cannot override them — this is the place to change them.
+const SITE_URL = ''          // e.g. 'https://example.com'. Empty is fine in development.
+const PUSHER_APP_KEY = ''    // public, client-side key — not a secret.
+const PUSHER_APP_CLUSTER = ''
+
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
 
+  // Everything the project needs to boot lives here, not in a `.env` — Nuxt still lets a
+  // deploy override any of it with the matching `NUXT_*` variable. The ONE exception is
+  // the API token below: keep secrets in the environment, never in a committed file.
   runtimeConfig: {
-    xApiToken: '',        // NUXT_X_API_TOKEN — private, server-only. Injected by server/api/[...].js proxy.
-    apiBaseUrl: '',       // NUXT_API_BASE_URL — private. Real Laravel URL the proxy forwards to.
+    xApiToken: '',        // NUXT_X_API_TOKEN — secret. Never hardcode it; see .env.example.
+    apiBaseUrl: 'http://localhost:8000', // NUXT_API_BASE_URL overrides this on a deploy.
     trustProxy: false,    // NUXT_TRUST_PROXY — true only behind a reverse proxy that appends the real client IP to X-Forwarded-For.
     public: {
       baseUrl: '',        // own origin (relative). Client fetches hit Nitro proxy, not Laravel directly.
-      translationsMode: process.env.NUXT_PUBLIC_TRANSLATIONS_MODE || 'remote', // 'remote' | 'local'
+      translationsMode: 'remote', // 'remote' | 'local'
       firebase: {
         apiKey: '',
         authDomain: '',
@@ -23,8 +34,8 @@ export default defineNuxtConfig({
   },
 
   echo: {
-    key: process.env.NUXT_PUBLIC_PUSHER_APP_KEY,
-    cluster: process.env.NUXT_PUBLIC_PUSHER_APP_CLUSTER,
+    key: PUSHER_APP_KEY,
+    cluster: PUSHER_APP_CLUSTER,
     broadcaster: 'pusher', // available: reverb, pusher
     authentication: {
       mode: 'token',
@@ -101,9 +112,9 @@ export default defineNuxtConfig({
   },
 
   i18n: {
-    // Only when known at build time: a localhost fallback here would be picked up by
-    // nuxt-site-config as the canonical origin and win over the runtime env.
-    ...(process.env.NUXT_PUBLIC_SITE_URL ? { baseUrl: process.env.NUXT_PUBLIC_SITE_URL } : {}),
+    // Only when known: a localhost fallback here would be picked up by nuxt-site-config
+    // as the canonical origin and win over the real one.
+    ...(SITE_URL ? { baseUrl: SITE_URL } : {}),
     locales: [
       { code: 'en', language: 'en-US', file: 'en.json', name: 'English', dir: 'ltr' },
       { code: 'ar', language: 'ar-SA', file: 'ar.json', name: 'العربية', dir: 'rtl' }

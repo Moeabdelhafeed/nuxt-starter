@@ -38,7 +38,7 @@ Config endpoints:
   - `allowed_phone_countries` — the string `"all"` **or** an array of ISO country codes like `["JO","SA","US"]`. When an array, restrict the phone country-code picker to those.
 - `GET /api/languages` — returns array of `{ id, code, name, native_name, direction, is_default, image: { image_api } }`.
 - `GET /api/translations?group=web` — returns `{ group, locale, translations: { [sub_group]: { key: "value with :placeholders" } } }` for the current `Accept-Language`. Nested by sub-group; `useLang(group, subGroup)` slices its own.
-- `POST /api/translations` — body `{ translations: { key: value }, group, sub_group }`. Used in remote mode to seed missing keys. **Gated by the backend's `testing-only` middleware** (403 unless `IS_TESTING=true`), as are `DELETE /api/translations` and `POST/DELETE /api/media`.
+- `POST /api/translations` — body `{ translations: { key: value }, group, sub_group }`. Used in remote mode to seed missing keys. **Gated by the backend's `content-seeding` middleware** (403 unless `ALLOW_CONTENT_SEEDING=true`), as are `DELETE /api/translations` and `POST/DELETE /api/media`. It **defaults to true**, production included, because a live install legitimately needs seeding exactly once — when the app first pushes its translations and media in. It used to be `IS_TESTING`, which meant a production site could never be seeded through the API at all. The backend turns it off in its Deploy panel once the content is in.
 - `GET /api/app-settings` — public (no Bearer), gated by backend `HAS_APP_SETTINGS`. Returns the app's link blocks, localized via `Accept-Language`. `data` always has all five keys (empty arrays when unset), each item ordered by `sort_order`, active only:
   ```json
   { "social": [{ "id": 1, "text": "Twitter", "url": "https://…", "image": { "id": 7, "url": "app-settings/x.webp", "type": "webp", "blurhash": "L…", "image_api": "https://…" } }],
@@ -275,8 +275,9 @@ duplicates, a URL that changes under the browser, and a just-written file that 4
 moment (which reads as a broken image).
 
 Keys seed only from pages that use them, in a real browser, and only where the backend
-allows writes (`IS_TESTING=true` — the backend's `testing-only` middleware 403s otherwise).
-A production API provisions nothing.
+allows writes (`ALLOW_CONTENT_SEEDING=true` — the backend's `content-seeding` middleware
+403s otherwise). That flag defaults to **true**, so a fresh production API does seed; the
+backend switches it off once the real content is in, and a 403 here is expected from then on.
 
 ## Common gotchas
 
